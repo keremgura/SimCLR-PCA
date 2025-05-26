@@ -73,7 +73,7 @@ parser.add_argument('--n-views', default=2, type=int, metavar='N',
 parser.add_argument('--gpu-index', default=0, type=int, help='Gpu index.')
 parser.add_argument("--pca_ratio", default = 0.5, type = float, help = "pca masking ratio")
 parser.add_argument("--global_scaling", default = 0, type = int, choices = [1, 0], help = "whether scaling of images are done image-based (0) or based on the min / max of the whole batch (1)")
-parser.add_argument("--pca", default = 1, type = int, choices = [1, 0], help = "1 if pca is applied in the augmentations")
+parser.add_argument("--pca", default = 0, type = int, choices = [1, 0], help = "1 if pca is applied in the augmentations")
 parser.add_argument("--extra_transforms", default = 0, type = int, choices = [2, 1, 0], help = '2: all simclr augmentations, 1: only cropping and flipping, 0: no extra augmentations')
 parser.add_argument('--dropout', type=float, default=0.05,
                     help='Dropout rate to apply in the projection head. Set to 0.0 to disable.')

@@ -193,68 +193,6 @@ class PCAAugmentor:
 
     def extract_views(self, img, eigenvalues):
         
-        def interpolate_pca_matrix(P_masked, output_x, output_y):
-            
-            P_masked_tensor = torch.tensor(P_masked, dtype=torch.float32).unsqueeze(0).unsqueeze(0)
-            P_interp_tensor = F.interpolate(P_masked_tensor, 
-                                            size=(output_x, output_y), 
-                                            mode='bilinear', # bicubic also worth looking
-                                            align_corners=False) 
-            P_interp = P_interp_tensor.squeeze(0).squeeze(0)
-            return P_interp
-
-        def pad_pca_matrix_with_mask(P_full, keep_indices):
-            """
-            Returns a D x D matrix where columns not in `keep_indices` are zero.
-            This preserves PC alignment.
-            """
-            D = P_full.shape[1]
-            P_padded = torch.zeros_like(P_full)  # shape [D, D]
-            P_padded[:, keep_indices] = P_full[:, keep_indices]
-            return P_padded
-
-        def mean_pad_pca_matrix(P_full, keep_indices, target_dim):
-            device = P_full.device
-            P_padded = torch.zeros_like(P_full)
-
-            # Keep original PCs in correct positions
-            P_padded[:, keep_indices] = P_full[:, keep_indices]
-
-            # Fill missing components with column mean (computed over kept PCs)
-            mean_vector = P_full[:, keep_indices].mean(dim=1, keepdim=True)  # shape [D, 1]
-
-            # Set remaining indices
-            all_indices = torch.arange(target_dim, device=device)
-            mask = torch.ones(target_dim, dtype=torch.bool, device=device)
-            mask[keep_indices] = False
-            drop_indices = all_indices[mask]
-
-            P_padded[:, drop_indices] = mean_vector
-
-            return P_padded
-
-        def gaussian_pad_pca_matrix(P_full, keep_indices, target_dim, std=0.01):
-            """
-            Fills dropped components with Gaussian noise while keeping original PCs in correct positions.
-            """
-            device = P_full.device
-            P_padded = torch.zeros_like(P_full)
-
-            # Keep selected PCs
-            P_padded[:, keep_indices] = P_full[:, keep_indices]
-
-            # Indices for dropped PCs
-            all_indices = torch.arange(target_dim, device=device)
-            mask = torch.ones(target_dim, dtype=torch.bool, device=device)
-            mask[keep_indices] = False
-            drop_indices = all_indices[mask]
-
-            # Fill with Gaussian noise
-            noise = torch.randn((P_full.shape[0], drop_indices.shape[0]), device=device) * std
-            P_padded[:, drop_indices] = noise
-
-            return P_padded
-
         def pad_matrix(P_full, keep_indices, strategy="pad", target_dim=None, std=0.01):
             device = P_full.device
             D = P_full.shape[1]
@@ -285,12 +223,10 @@ class PCAAugmentor:
                 if len(gaussian_indices) > 0:
                     noise = torch.randn((P_full.shape[0], len(gaussian_indices)), device=device) * std
                     P_padded[:, gaussian_indices] = noise
-            # else: zero padding is already applied by default
             return P_padded
 
         if not isinstance(img, torch.Tensor):
             img = self.to_tensor(img).cpu()
-        #img = self.to_tensor(img).cpu()
         img = img.to(self.device)  # Move image to device
         img_flat = img.view(1, -1)  # Flatten image
 
@@ -301,8 +237,6 @@ class PCAAugmentor:
         
         
         if self.interpolate:
-            # Approach 1: random interpolation for each view
-            
             import random
             if self.pad_strategy == "random":
                 strategy_input = random.choice(["pad", "mean", "gaussian", "hybrid"])
@@ -315,79 +249,6 @@ class PCAAugmentor:
             p_target_full = pad_matrix(self.masking_fn_, pc_mask_input, strategy_target, D)
             img_reconstructed = img_flat @ p_input_full @ p_input_full.T
             target = img_flat @ p_target_full @ p_target_full.T
-
-
-            """if self.pad_strategy == "pad":
-                p_input_full = pad_pca_matrix_with_mask(self.masking_fn_, pc_mask)
-                p_target_full = pad_pca_matrix_with_mask(self.masking_fn_, pc_mask_input)
-            elif self.pad_strategy == "mean":
-                p_input_full = mean_pad_pca_matrix(self.masking_fn_, pc_mask, D)
-                p_target_full = mean_pad_pca_matrix(self.masking_fn_, pc_mask_input, D)
-            elif self.pad_strategy == "gaussian":
-                p_input_full = gaussian_pad_pca_matrix(self.masking_fn_, pc_mask, D)
-                p_target_full = gaussian_pad_pca_matrix(self.masking_fn_, pc_mask_input, D)
-            else:
-                p_input_full = interpolate_pca_matrix(self.masking_fn_[:, pc_mask], self.masking_fn_[:, pc_mask].shape[0], D)
-                p_target_full = interpolate_pca_matrix(self.masking_fn_[:, pc_mask_input], self.masking_fn_[:, pc_mask_input].shape[0], D)
-
-            target = img_flat @ p_target_full @ p_target_full.T
-            img_reconstructed = img_flat @ p_input_full @ p_input_full.T"""
-
-            """def get_padded_matrix(strategy, mask):
-                if strategy == "pad":
-                    return pad_pca_matrix_with_mask(self.masking_fn_, mask)
-                elif strategy == "mean":
-                    return mean_pad_pca_matrix(self.masking_fn_, mask, D)
-                elif strategy == "gaussian":
-                    return gaussian_pad_pca_matrix(self.masking_fn_, mask, D)
-                else:
-                    return interpolate_pca_matrix(self.masking_fn_[:, mask], self.masking_fn_[:, mask].shape[0], D)
-
-            p_input_full = get_padded_matrix(strategy_input, pc_mask)
-            p_target_full = get_padded_matrix(strategy_target, pc_mask_input)"""
-
-            # Approach 2: random method for each column
-            """def hybrid_pad_pca_matrix(P_full, keep_indices, target_dim, mean_ratio=0.4, gaussian_ratio = 0.2):
-                
-                device = P_full.device
-                P_padded = torch.zeros_like(P_full)  # shape [D, D]
-                # Keep selected PCs
-                P_padded[:, keep_indices] = P_full[:, keep_indices]
-
-                # Compute drop indices
-                all_indices = torch.arange(target_dim, device=device)
-                mask = torch.ones(target_dim, dtype=torch.bool, device=device)
-                mask[keep_indices] = False
-                drop_indices = all_indices[mask]
-
-                # Random assignment to strategies
-                rand_vals = torch.rand(len(drop_indices), device=device)
-                mean_mask = rand_vals < mean_ratio
-                gaussian_mask = (rand_vals >= mean_ratio) & (rand_vals < mean_ratio + gaussian_ratio)
-                
-                mean_indices = drop_indices[mean_mask]
-                gaussian_indices = drop_indices[gaussian_mask]
-                
-                # Fill mean-padded indices
-                if len(mean_indices) > 0:
-                    mean_vector = P_full[:, keep_indices].mean(dim=1, keepdim=True)  # shape [D, 1]
-                    P_padded[:, mean_indices] = mean_vector
-
-                # Fill Gaussian-padded indices
-                if len(gaussian_indices) > 0:
-                    noise = torch.randn((P_full.shape[0], len(gaussian_indices)), device=device) * 0.01
-                    P_padded[:, gaussian_indices] = noise
-
-
-                return P_padded"""
-
-            
-            #p_input_full = hybrid_pad_pca_matrix(self.masking_fn_, pc_mask, D)
-            #p_target_full = hybrid_pad_pca_matrix(self.masking_fn_, pc_mask_input, D)
-
-
-            
-            
         else:
             # Compute which PCA components to mask
             p_input = self.masking_fn_[:, pc_mask_input]

@@ -135,6 +135,8 @@ class PCATransformerSimCLR(nn.Module):
 
         # Patch embedding: project each patch of size patch_size to hidden_dim
         self.patch_embed = nn.Linear(patch_size, hidden_dim)
+        self.pos_embed = nn.Parameter(torch.randn(1, self.num_patches + 1, hidden_dim))
+        self.cls_token = nn.Parameter(torch.randn(1, 1, hidden_dim))
 
 
         # Transformer encoder layer
@@ -161,19 +163,24 @@ class PCATransformerSimCLR(nn.Module):
     def forward(self, x):
         # Input x shape: [batch_size, input_dim]
         B = x.size(0)
-        # Patchify: split into [B, num_patches, patch_size]
         x = x.contiguous().view(B, self.num_patches, self.patch_size)
         x = self.patch_embed(x)
+        cls_tokens = self.cls_token.expand(B, -1, -1)
+        x = torch.cat((cls_tokens, x), dim=1)
+        x = x + self.pos_embed
         x = self.transformer(x)
-        x = self.norm(x.mean(dim=1))          
+        x = self.norm(x[:, 0])                  
         return self.projector(x)
 
     def get_features(self, x):
         B = x.size(0)
         x = x.contiguous().view(B, self.num_patches, self.patch_size)
         x = self.patch_embed(x)
+        cls_tokens = self.cls_token.expand(B, -1, -1)
+        x = torch.cat((cls_tokens, x), dim=1)
+        x = x + self.pos_embed
         x = self.transformer(x)
-        x = self.norm(x.mean(dim=1))
+        x = self.norm(x[:, 0])  
         return F.normalize(x, dim=1)
 
 

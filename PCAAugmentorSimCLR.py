@@ -39,7 +39,91 @@ class PCAAugmentor:
         eigenvalues_np = eigenvalues.cpu().numpy()
         total_variance = np.sum(eigenvalues_np)
 
+        def sample_view_mask(strategy, drop_ratio, retain_ratio):
+            sorted_indices = np.argsort(eigenvalues_np)[::-1]
+            sorted_eigvals = eigenvalues_np[sorted_indices]
+            cumsum = np.cumsum(sorted_eigvals)
 
+            
+
+            if strategy == "low":
+                drop_threshold = np.argmax(cumsum >= (1 - drop_ratio) * total_variance)
+                retain_indices = sorted_indices[:drop_threshold]
+
+            elif strategy == "middle":
+                drop_lower = (0.5 - drop_ratio / 2) * total_variance
+                drop_upper = (0.5 + drop_ratio / 2) * total_variance
+                start_idx = np.searchsorted(cumsum, drop_lower)
+                end_idx = np.searchsorted(cumsum, drop_upper)
+                retain_indices = np.concatenate((sorted_indices[:start_idx], sorted_indices[end_idx:]))
+
+            else:  # "random"
+                index = torch.randperm(len(eigenvalues)).cpu().numpy()
+                eigvals_shuffled = eigenvalues_np[index]
+                cumsum = np.cumsum(eigvals_shuffled)
+
+                drop_cutoff = np.argmin(np.abs(cumsum - d))
+                cumsum_after_drop = np.cumsum(eigvals_shuffled[drop_cutoff:])
+                retain_thresh = np.argmin(np.abs(cumsum_after_drop - m * (1 - d)))
+
+                selected = index[drop_cutoff:drop_cutoff + retain_thresh]
+                #retain_indices = np.arange(len(eigenvalues_np))
+
+            
+
+            if strategy != "random":
+                if self.shuffle:
+                    np.random.shuffle(retain_indices)
+                retained_eigvals = eigenvalues_np[retain_indices]
+                cumsum_ret = np.cumsum(retained_eigvals)
+                threshold = np.argmin(np.abs(cumsum_ret - retain_ratio * (1 - drop_ratio)))
+                selected = retain_indices[:threshold]
+
+            return torch.tensor(selected.copy(), dtype=torch.long, device=self.device)
+
+
+        # Apply slight randomization to drop and retain ratios for both input and target
+        drop_randomize = 0.1
+        mask_randomize = 0.1
+        drop_input = d + np.random.uniform(-drop_randomize, drop_randomize)
+        retain_input = m + np.random.uniform(-mask_randomize, mask_randomize)
+        drop_target = d + np.random.uniform(-drop_randomize, drop_randomize)
+        retain_target = m + np.random.uniform(-mask_randomize, mask_randomize)
+
+        # Weighted randomization of drop_strategy per call if requested
+        if self.drop_strategy == "arbitrary":
+            strategy_pool = ["random", "low", "middle"]
+            strategy_weights = [0.7, 0.15, 0.15]
+            selected_strategy_input = np.random.choice(strategy_pool, p=strategy_weights)
+            selected_strategy_target = np.random.choice(strategy_pool, p=strategy_weights)
+        else:
+            selected_strategy_input = selected_strategy_target = self.drop_strategy
+
+            
+
+        if double_shuffle:
+            pc_mask_input = sample_view_mask(
+                selected_strategy_input,
+                np.clip(drop_input, 0.0, 0.5),
+                np.clip(retain_input, 0.0, 1.0))
+            pc_mask_target = sample_view_mask(
+                selected_strategy_target,
+                np.clip(drop_target, 0.0, 0.5),
+                np.clip(retain_target, 0.0, 1.0))
+
+            
+        else:
+            # Use a shared retained set, then split into disjoint parts
+            base_mask = sample_view_mask(self.drop_strategy, d, 1.0)
+            if self.shuffle:
+                base_mask = base_mask[torch.randperm(base_mask.shape[0])]
+            split_idx = int(m * base_mask.shape[0])
+            pc_mask_input = base_mask[:split_idx]
+            pc_mask_target = base_mask[split_idx:]
+
+        return pc_mask_input, pc_mask_target
+
+        """
         if double_shuffle:
 
             def get_view_mask():
@@ -103,8 +187,10 @@ class PCAAugmentor:
                     threshold = np.argmin(np.abs(cumsum_ret - m * (1 - d)))
                     selected = retain_indices[:threshold]
                     
-                else:
-                    raise ValueError(f"Unsupported drop strategy: {self.drop_strategy}")
+                selected_eigvals = eigenvalues_np[selected]
+                retained_var = selected_eigvals.sum() / total_variance
+                #print(f"[DEBUG] Double view retained variance: {retained_var:.4f}")
+
 
                 return torch.tensor(selected.copy(), dtype=torch.long, device=self.device)
 
@@ -131,6 +217,13 @@ class PCAAugmentor:
 
             pc_mask_input = torch.tensor(index[drop_cutoff:first_view_cutoff].copy(), dtype=torch.long, device=self.device)
             pc_mask_target = torch.tensor(index[first_view_cutoff:].copy(), dtype=torch.long, device=self.device)
+
+            retained_eigvals_input = eigenvalues_np[pc_mask_input.cpu().numpy()]
+            retained_eigvals_target = eigenvalues_np[pc_mask_target.cpu().numpy()]
+            var_input = retained_eigvals_input.sum() / total_variance
+            var_target = retained_eigvals_target.sum() / total_variance
+            #print(f"[DEBUG] View 1 retained variance: {var_input:.4f}, View 2 retained variance: {var_target:.4f}")
+
 
             return pc_mask_input, pc_mask_target, index
         
@@ -162,12 +255,6 @@ class PCAAugmentor:
                 sorted_indices[:start_idx],
                 sorted_indices[end_idx:]))
 
-        elif self.drop_strategy == "high":
-            drop_threshold = np.argmax(cumsum >= d * total_variance)
-            
-            retain_indices = sorted_indices[drop_threshold:]
-        
-
         retained_eigvals = eigenvalues_np[retain_indices]
         if self.shuffle:
             idx = torch.randperm(retained_eigvals.shape[0])
@@ -188,8 +275,14 @@ class PCAAugmentor:
         pc_mask_input = torch.tensor(pc_mask_input, dtype=torch.long, device=self.device)
         pc_mask_target = torch.tensor(pc_mask_target, dtype=torch.long, device=self.device)
 
+        retained_eigvals_input = eigenvalues_np[pc_mask_input.cpu().numpy()]
+        retained_eigvals_target = eigenvalues_np[pc_mask_target.cpu().numpy()]
+        var_input = retained_eigvals_input.sum() / total_variance
+        var_target = retained_eigvals_target.sum() / total_variance
+        #print(f"[DEBUG] View 1 retained variance: {var_input:.4f}, View 2 retained variance: {var_target:.4f}")
 
-        return pc_mask_input, pc_mask_target, index
+
+        return pc_mask_input, pc_mask_target, index"""
 
     def extract_views(self, img, eigenvalues):
         
@@ -230,7 +323,7 @@ class PCAAugmentor:
         img = img.to(self.device)  # Move image to device
         img_flat = img.view(1, -1)  # Flatten image
 
-        pc_mask, pc_mask_input, index = self.compute_pc_mask(eigenvalues)
+        pc_mask, pc_mask_input = self.compute_pc_mask(eigenvalues)
 
         D = self.masking_fn_.shape[1]
         

@@ -249,7 +249,7 @@ def visualize_views(train_dataset, original_dataset, args):
     save_folder = f"views/simclr_pca_{pca_ratio_str}"
     os.makedirs(save_folder, exist_ok=True)
 
-    for i in range(10):
+    for i in range(15):
         img_views, label = train_dataset[i]
         img1, img2 = img_views[0].cpu(), img_views[1].cpu()
         if hasattr(train_dataset, 'indices'):

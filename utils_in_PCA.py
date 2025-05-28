@@ -75,9 +75,10 @@ def generate_experiment_name(args, prefix="simclr_in"):
     shuffle_flag = "shuffle" if args.shuffle else "no_shuffle"
     interpolate_flag = "interpolate" if args.interpolate else ""
     pad = str(args.pad_strategy)
+    vit = "vit" if args.vit else "mlp"
     
     # Final name
-    experiment_name = f"{prefix}_pca_{dataset}_{pca_ratio_str}_{pca_flag}_{double}_{extra_flag}_{shuffle_flag}_{interpolate_flag}_{pad}_{drop_pc_ratio}_{timestamp}"
+    experiment_name = f"{prefix}_pca_{dataset}_{pca_ratio_str}_{pca_flag}_{double}_{extra_flag}_{shuffle_flag}_{interpolate_flag}_{pad}_{drop_pc_ratio}_{vit}_{timestamp}"
     return experiment_name
 
 # function to compute the minimum and maximum considering every image
@@ -122,7 +123,9 @@ def setup_pca(args, dataset):
         pca_ratio=args.pca_ratio,
         device=args.device,
         drop_ratio=args.drop_pc_ratio,
+        drop_strategy=args.drop_strategy,
         shuffle=args.shuffle,
+        double=args.double,
         interpolate=args.interpolate,
         pad_strategy=args.pad_strategy)
 

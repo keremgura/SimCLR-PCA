@@ -47,8 +47,11 @@ class PCAAugmentor:
             
 
             if strategy == "low":
-                drop_threshold = np.argmax(cumsum >= (1 - drop_ratio) * total_variance)
-                retain_indices = sorted_indices[:drop_threshold]
+                if drop_ratio == 0:
+                    retain_indices = sorted_indices
+                else:
+                    drop_threshold = np.argmax(cumsum >= (1 - drop_ratio) * total_variance)
+                    retain_indices = sorted_indices[:drop_threshold]
 
             elif strategy == "middle":
                 drop_lower = (0.5 - drop_ratio / 2) * total_variance
@@ -123,166 +126,7 @@ class PCAAugmentor:
 
         return pc_mask_input, pc_mask_target
 
-        """
-        if double_shuffle:
-
-            def get_view_mask():
-                if self.drop_strategy == "random":
-                    index = torch.randperm(len(eigenvalues)).cpu().numpy()
-                    eigvals_shuffled = eigenvalues_np[index]
-                    cumsum = np.cumsum(eigvals_shuffled)
-
-                    drop_cutoff = np.argmin(np.abs(cumsum - d))
-                    cumsum_after_drop = np.cumsum(eigvals_shuffled[drop_cutoff:])
-                    retain_thresh = np.argmin(np.abs(cumsum_after_drop - m * (1 - d)))
-
-                    selected = index[drop_cutoff:drop_cutoff + retain_thresh]
-
-                elif self.drop_strategy == "low":
-                    sorted_indices = np.argsort(eigenvalues_np)[::-1]  # Descending
-                    sorted_eigvals = eigenvalues_np[sorted_indices]
-                    cumsum = np.cumsum(sorted_eigvals)
-
-                    if d == 0:
-                        retain_indices = sorted_indices
-                    else:
-                        drop_threshold = np.argmax(cumsum >= (1 - d) * total_variance)
-                        retain_indices = sorted_indices[:drop_threshold]
-
-                    if self.shuffle:
-                        np.random.shuffle(retain_indices)
-
-                    retained_eigvals = eigenvalues_np[retain_indices]
-                    cumsum_ret = np.cumsum(retained_eigvals)
-                    threshold = np.argmin(np.abs(cumsum_ret - m * (1 - d)))
-                    selected = retain_indices[:threshold]
-
-                elif self.drop_strategy == "middle":
-                    sorted_indices = np.argsort(eigenvalues_np)[::-1]
-                    sorted_eigvals = eigenvalues_np[sorted_indices]
-                    cumsum = np.cumsum(sorted_eigvals)
-                    
-
-
-                    drop_lower = (0.5 - d / 2) * total_variance
-                    drop_upper = (0.5 + d / 2) * total_variance
-
-                    start_idx = np.searchsorted(cumsum, drop_lower)
-                    end_idx   = np.searchsorted(cumsum, drop_upper)
-
-                    # Drop the middle range
-                    dropped_indices = sorted_indices[start_idx:end_idx]
-
-                    # Retain the rest
-                    retain_indices = np.concatenate([
-                        sorted_indices[:start_idx],
-                        sorted_indices[end_idx:]])
-
-                    if self.shuffle:
-                        np.random.shuffle(retain_indices)
-
-                    retained_eigvals = eigenvalues_np[retain_indices]
-
-                    cumsum_ret = np.cumsum(retained_eigvals)
-                    threshold = np.argmin(np.abs(cumsum_ret - m * (1 - d)))
-                    selected = retain_indices[:threshold]
-                    
-                selected_eigvals = eigenvalues_np[selected]
-                retained_var = selected_eigvals.sum() / total_variance
-                #print(f"[DEBUG] Double view retained variance: {retained_var:.4f}")
-
-
-                return torch.tensor(selected.copy(), dtype=torch.long, device=self.device)
-
-            pc_mask_input = get_view_mask()
-            pc_mask_target = get_view_mask()
-
-            return pc_mask_input, pc_mask_target, torch.randperm(len(eigenvalues)).cpu().numpy()
-
-
-
-        # no double shuffling
-        if self.shuffle:
-            index = torch.randperm(eigenvalues.shape[0]).cpu().numpy()  # Random shuffle
-        else:
-            index = np.arange(eigenvalues.shape[0])
-
-        
-
-        if self.drop_strategy == "random":
-            cumsum = np.cumsum(eigenvalues.cpu().numpy()[index])
-
-            drop_cutoff = np.argmin(np.abs(cumsum - d))
-            first_view_cutoff = np.argmin(np.abs(cumsum - (d + (1 - d) * m)))
-
-            pc_mask_input = torch.tensor(index[drop_cutoff:first_view_cutoff].copy(), dtype=torch.long, device=self.device)
-            pc_mask_target = torch.tensor(index[first_view_cutoff:].copy(), dtype=torch.long, device=self.device)
-
-            retained_eigvals_input = eigenvalues_np[pc_mask_input.cpu().numpy()]
-            retained_eigvals_target = eigenvalues_np[pc_mask_target.cpu().numpy()]
-            var_input = retained_eigvals_input.sum() / total_variance
-            var_target = retained_eigvals_target.sum() / total_variance
-            #print(f"[DEBUG] View 1 retained variance: {var_input:.4f}, View 2 retained variance: {var_target:.4f}")
-
-
-            return pc_mask_input, pc_mask_target, index
-        
-        
-        
-
-        total_variance = torch.sum(eigenvalues).item()
-        eigenvalues_np = eigenvalues.cpu().numpy()
-        total_pc = len(eigenvalues_np)
-
-        # Step 1: Drop components based on variance contribution
-        sorted_indices = np.argsort(eigenvalues_np)[::-1]  # Descending by variance
-        sorted_eigvals = eigenvalues_np[sorted_indices]
-        cumsum = np.cumsum(sorted_eigvals)
-
-        if self.drop_strategy == "low":
-            # Drop PCs from the tail of explained variance (low variance)
-            drop_threshold = np.argmax(cumsum >= (1 - d) * total_variance)
-            retain_indices = sorted_indices[:drop_threshold]
-        elif self.drop_strategy == "middle":
-            # Identify both start and end of the "middle" d% of explained variance to drop
-            drop_lower = (0.5 - d / 2) * total_variance
-            drop_upper = (0.5 + d / 2) * total_variance
-
-            start_idx = np.searchsorted(cumsum, drop_lower)
-            end_idx   = np.searchsorted(cumsum, drop_upper)
-
-            retain_indices = np.concatenate((
-                sorted_indices[:start_idx],
-                sorted_indices[end_idx:]))
-
-        retained_eigvals = eigenvalues_np[retain_indices]
-        if self.shuffle:
-            idx = torch.randperm(retained_eigvals.shape[0])
-            retained_eigvals = retained_eigvals[idx]
-            retain_indices = retain_indices[idx]
-
-
-        # Step 3: Select m% of retained variance for View 1
-        
-        retained_total_var = np.sum(retained_eigvals)
-        retained_cumsum = np.cumsum(retained_eigvals)
-
-        visible_threshold = np.argmin(np.abs(retained_cumsum - m * retained_total_var))
-
-        pc_mask_input = retain_indices[:visible_threshold]
-        pc_mask_target = retain_indices[visible_threshold:]
-        
-        pc_mask_input = torch.tensor(pc_mask_input, dtype=torch.long, device=self.device)
-        pc_mask_target = torch.tensor(pc_mask_target, dtype=torch.long, device=self.device)
-
-        retained_eigvals_input = eigenvalues_np[pc_mask_input.cpu().numpy()]
-        retained_eigvals_target = eigenvalues_np[pc_mask_target.cpu().numpy()]
-        var_input = retained_eigvals_input.sum() / total_variance
-        var_target = retained_eigvals_target.sum() / total_variance
-        #print(f"[DEBUG] View 1 retained variance: {var_input:.4f}, View 2 retained variance: {var_target:.4f}")
-
-
-        return pc_mask_input, pc_mask_target, index"""
+    
 
     def extract_views(self, img, eigenvalues):
         

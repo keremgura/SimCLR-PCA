@@ -47,18 +47,27 @@ class PCAAugmentor:
             
 
             if strategy == "low":
-                if drop_ratio == 0:
-                    retain_indices = sorted_indices
+                mask = cumsum >= (1 - drop_ratio) * total_variance
+                if not np.any(mask):
+                    drop_threshold = len(sorted_indices)
                 else:
-                    drop_threshold = np.argmax(cumsum >= (1 - drop_ratio) * total_variance)
-                    retain_indices = sorted_indices[:drop_threshold]
+                    drop_threshold = np.argmax(mask)
+
+                retain_indices = sorted_indices[:drop_threshold]
+                if len(retain_indices) == 0 or drop_ratio == 0:
+                    retain_indices = sorted_indices
+
+                
 
             elif strategy == "middle":
                 drop_lower = (0.5 - drop_ratio / 2) * total_variance
                 drop_upper = (0.5 + drop_ratio / 2) * total_variance
                 start_idx = np.searchsorted(cumsum, drop_lower)
                 end_idx = np.searchsorted(cumsum, drop_upper)
-                retain_indices = np.concatenate((sorted_indices[:start_idx], sorted_indices[end_idx:]))
+                retain_indices = np.concatenate([sorted_indices[:start_idx], sorted_indices[end_idx:]])
+
+                if len(retain_indices) == 0 or end_idx <= start_idx:
+                    retain_indices = sorted_indices
 
             else:  # "random"
                 index = torch.randperm(len(eigenvalues)).cpu().numpy()
@@ -79,14 +88,19 @@ class PCAAugmentor:
                     np.random.shuffle(retain_indices)
                 retained_eigvals = eigenvalues_np[retain_indices]
                 cumsum_ret = np.cumsum(retained_eigvals)
-                threshold = np.argmin(np.abs(cumsum_ret - retain_ratio * (1 - drop_ratio)))
-                selected = retain_indices[:threshold]
+
+                diffs = np.abs(cumsum_ret - retain_ratio * (1 - drop_ratio))
+                if len(diffs) == 0:
+                    selected = retain_indices
+                else:
+                    threshold = np.argmin(diffs)
+                    selected = retain_indices if threshold == 0 else retain_indices[:threshold]
 
             return torch.tensor(selected.copy(), dtype=torch.long, device=self.device)
 
 
         # Apply slight randomization to drop and retain ratios for both input and target
-        drop_randomize = 0.1
+        drop_randomize = 0.1 if d > 0 else 0
         mask_randomize = 0.1
         drop_input = d + np.random.uniform(-drop_randomize, drop_randomize)
         retain_input = m + np.random.uniform(-mask_randomize, mask_randomize)

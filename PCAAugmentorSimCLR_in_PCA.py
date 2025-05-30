@@ -132,7 +132,7 @@ class PCAAugmentor:
             
         else:
             # Use a shared retained set, then split into disjoint parts
-            base_mask = sample_view_mask(self.drop_strategy, d, 1.0)
+            base_mask = sample_view_mask(selected_strategy_input, d, 1.0)
             if self.shuffle:
                 base_mask = base_mask[torch.randperm(base_mask.shape[0])]
             split_idx = int(m * base_mask.shape[0])
@@ -178,6 +178,37 @@ class PCAAugmentor:
                     P_padded[:, gaussian_indices] = noise
             return P_padded
 
+        
+
+        # === Interpolate the resulting vectors instead of the matrix ===
+        def pad_vector(vec, keep_indices, target_dim, strategy="pad", std=0.01):
+            device = vec.device
+            padded = torch.zeros(1, target_dim, device=device)
+            padded[0, keep_indices] = vec[0]
+
+            all_indices = torch.arange(target_dim, device=device)
+            drop_indices = all_indices[~torch.isin(all_indices, keep_indices)]
+
+            if strategy == "mean":
+                mean_value = vec.mean()
+                padded[:, drop_indices] = mean_value
+            elif strategy == "gaussian":
+                noise = torch.randn(1, len(drop_indices), device=device) * std
+                padded[:, drop_indices] = noise
+            elif strategy == "hybrid":
+                rand_vals = torch.rand(len(drop_indices), device=device)
+                mean_mask = rand_vals < 0.4
+                gaussian_mask = (rand_vals >= 0.4) & (rand_vals < 0.6)
+                mean_indices = drop_indices[mean_mask]
+                gaussian_indices = drop_indices[gaussian_mask]
+                if len(mean_indices) > 0:
+                    mean_value = vec.mean()
+                    padded[:, mean_indices] = mean_value
+                if len(gaussian_indices) > 0:
+                    noise = torch.randn(1, len(gaussian_indices), device=device) * std
+                    padded[:, gaussian_indices] = noise
+
+            return padded
 
         if not isinstance(img, torch.Tensor):
             img = self.to_tensor(img).cpu()
@@ -199,29 +230,21 @@ class PCAAugmentor:
         else:
             strategy_input, strategy_target = self.pad_strategy, self.pad_strategy
 
-        
-        p_input_full = pad_matrix(self.masking_fn_, pc_mask, strategy_input, D)
-        p_target_full = pad_matrix(self.masking_fn_, pc_mask_input, strategy_target, D)
+        use_vector_padding = True
 
-        """
-        if self.pad_strategy == "pad":
-            p_input_full = pad_pca_matrix_with_mask(self.masking_fn_, pc_mask)
-            p_target_full = pad_pca_matrix_with_mask(self.masking_fn_, pc_mask_input)
-        elif self.pad_strategy == "mean":
-            p_input_full = mean_pad_pca_matrix(self.masking_fn_, pc_mask, D)
-            p_target_full = mean_pad_pca_matrix(self.masking_fn_, pc_mask_input, D)
-        elif self.pad_strategy == "gaussian":
-            p_input_full = gaussian_pad_pca_matrix(self.masking_fn_, pc_mask, D)
-            p_target_full = gaussian_pad_pca_matrix(self.masking_fn_, pc_mask_input, D)
+        if use_vector_padding:
+            view1 = img_flat @ self.masking_fn_[:, pc_mask]
+            view2 = img_flat @ self.masking_fn_[:, pc_mask_input]
+
+            view1 = pad_vector(view1, pc_mask, D, strategy_input)
+            view2 = pad_vector(view2, pc_mask_input, D, strategy_target)
         else:
-            p_input_full = interpolate_pca_matrix(self.masking_fn_[:, pc_mask], self.masking_fn_[:, pc_mask].shape[0], D)
-            p_target_full = interpolate_pca_matrix(self.masking_fn_[:, pc_mask_input], self.masking_fn_[:, pc_mask_input].shape[0], D)"""
+            p_input_full = pad_matrix(self.masking_fn_, pc_mask, strategy_input, D)
+            p_target_full = pad_matrix(self.masking_fn_, pc_mask_input, strategy_target, D)
 
-        
-
-        # === Projection & Reconstruction ===
-        view1 = img_flat @ p_input_full
-        view2 = img_flat @ p_target_full
+            # === Projection & Reconstruction ===
+            view1 = img_flat @ p_input_full
+            view2 = img_flat @ p_target_full
 
         # Compute and print cosine similarity between views
         cos_sim = F.cosine_similarity(view1, view2, dim=1).item()

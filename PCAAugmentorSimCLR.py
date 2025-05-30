@@ -131,7 +131,7 @@ class PCAAugmentor:
             
         else:
             # Use a shared retained set, then split into disjoint parts
-            base_mask = sample_view_mask(self.drop_strategy, d, 1.0)
+            base_mask = sample_view_mask(selected_strategy_input, d, 1.0)
             if self.shuffle:
                 base_mask = base_mask[torch.randperm(base_mask.shape[0])]
             split_idx = int(m * base_mask.shape[0])

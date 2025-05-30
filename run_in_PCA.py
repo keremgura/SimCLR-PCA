@@ -67,7 +67,7 @@ parser.add_argument('--temperature', default=0.07, type=float,
 parser.add_argument('--n-views', default=2, type=int, metavar='N',
                     help='Number of views for contrastive learning training.')
 parser.add_argument('--gpu-index', default=0, type=int, help='Gpu index.')
-parser.add_argument("--pca_ratio", default = 0.5, type = float, help = "pca masking ratio")
+parser.add_argument("--pca_ratio", default = 0.6, type = float, help = "pca masking ratio")
 parser.add_argument("--global_scaling", default = 0, type = int, choices = [1, 0])
 parser.add_argument("--pca", default = 1, type = int, choices = [1, 0])
 parser.add_argument("--extra_transforms", default = 0, type = int, choices = [2, 1, 0], help = '2: heavy augmentations, 1: light augmentations, 0: no extra augmentations')

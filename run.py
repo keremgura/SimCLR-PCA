@@ -43,7 +43,7 @@ parser.add_argument('-j', '--workers', default=0, type=int, metavar='N', # 12 no
                     help='number of data loading workers (default: 32)')
 parser.add_argument('--epochs', default=200, type=int, metavar='N',
                     help='number of total epochs to run')
-parser.add_argument('-b', '--batch-size', default=256, type=int,
+parser.add_argument('-b', '--batch_size', default=256, type=int,
                     metavar='N',
                     help='mini-batch size (default: 256), this is the total '
                          'batch size of all GPUs on the current node when '
@@ -71,7 +71,7 @@ parser.add_argument('--temperature', default=0.07, type=float,
 parser.add_argument('--n-views', default=2, type=int, metavar='N',
                     help='Number of views for contrastive learning training.')
 parser.add_argument('--gpu-index', default=0, type=int, help='Gpu index.')
-parser.add_argument("--pca_ratio", default = 0.5, type = float, help = "pca masking ratio")
+parser.add_argument("--pca_ratio", default = 0.6, type = float, help = "pca masking ratio")
 parser.add_argument("--global_scaling", default = 0, type = int, choices = [1, 0], help = "whether scaling of images are done image-based (0) or based on the min / max of the whole batch (1)")
 parser.add_argument("--pca", default = 1, type = int, choices = [1, 0], help = "1 if pca is applied in the augmentations")
 parser.add_argument("--extra_transforms", default = 0, type = int, choices = [2, 1, 0], help = '2: all simclr augmentations, 1: only cropping and flipping, 0: no extra augmentations')
@@ -80,7 +80,7 @@ parser.add_argument('--dropout', type=float, default=0.05,
 parser.add_argument('--validation_size', default = 0.1, type = float)
 parser.add_argument('--drop_pc_ratio', default = 0, type = float, help = 'ratio of variance explained to be dropped')
 parser.add_argument('--shuffle', action='store_true', help='Enable PCA component shuffling')
-parser.add_argument("--drop_strategy", default = "arbitrary", choices = ["random", "low", "middle", "arbitrary"], help = "determines which principal components are dropped")
+parser.add_argument("--drop_strategy", default = "random", choices = ["random", "low", "middle", "arbitrary"], help = "determines which principal components are dropped")
 parser.add_argument('--vit', action='store_true', help = 'whether a vision transformer is used')
 parser.add_argument('--min_crop_scale', default = 0.6, type = float, help = 'minimum scale for cropping')
 parser.add_argument('--double', action='store_true', help = 'enables double shuffling')

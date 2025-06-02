@@ -81,6 +81,9 @@ def generate_experiment_name(args, prefix="simclr"):
     double_flag = "double" if getattr(args, "double", False) else ""
     vit_flag = "vit" if getattr(args, "vit", False) else ""
 
+    batch_size = str(args.batch_size)
+    temp = f"temp{args.temperature}"
+
     # Assemble parts
     parts = [
         prefix,
@@ -95,8 +98,9 @@ def generate_experiment_name(args, prefix="simclr"):
         drop_strategy,
         interpolate_flag,
         pad,
-        vit_flag,
+        temp,
         resize,
+        batch_size,
         timestamp
     ]
 

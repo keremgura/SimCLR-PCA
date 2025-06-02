@@ -138,6 +138,21 @@ class PCAAugmentor:
             pc_mask_input = base_mask[:split_idx]
             pc_mask_target = base_mask[split_idx:]
 
+            """eigvals = eigenvalues[base_mask.cpu()].cpu().numpy()
+            if self.shuffle:
+                # Shuffle eigenvalues and base_mask together
+                indices = np.arange(len(base_mask))
+                np.random.shuffle(indices)
+                eigvals = eigvals[indices]
+                base_mask = base_mask[indices]
+
+            cumsum = np.cumsum(eigvals)
+            total = cumsum[-1]
+            midpoint = np.searchsorted(cumsum, total * m)
+            pc_mask_input = base_mask[:midpoint]
+            pc_mask_target = base_mask[midpoint:]"""
+
+
         return pc_mask_input, pc_mask_target
 
     
@@ -212,11 +227,17 @@ class PCAAugmentor:
 
         # **Normalize both views to [0,1]**
         if self.normalize:
-            img_reconstructed = img_reconstructed - img_reconstructed.min()
-            img_reconstructed = img_reconstructed / (img_reconstructed.max() - img_reconstructed.min())
+            denom = (img_reconstructed.max() - img_reconstructed.min())
+            if denom < 1e-4:
+                denom = 1e-4
+            img_reconstructed = (img_reconstructed - img_reconstructed.min()) / denom
 
-            target = target - target.min()
-            target = target / (target.max() - target.min())
+            denom_target = target.max() - target.min()
+            if denom_target < 1e-4:
+                denom_target = 1e-4
+
+            target = (target - target.min()) / denom_target
+            
 
         
         return img_reconstructed.view(img.shape).cpu(), target.view(img.shape).cpu()

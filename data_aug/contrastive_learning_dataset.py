@@ -52,6 +52,8 @@ class ContrastiveLearningDataset:
         else:
             resize_transform = transforms.Lambda(lambda x: x)  # no-op
 
+       
+
         ### 🧩 CASE 1: PCA augmentor
         if pca_augmentor is not None and eigenvalues is not None:
             if extra_augmentations:
@@ -75,5 +77,7 @@ class ContrastiveLearningDataset:
         ### 🧩 CASE 3: No augmentations
         else:
             transform = resize_transform
+
+        
 
         return dataset_class(dataset_root, transform=transform, download=False, **dataset_kwargs)

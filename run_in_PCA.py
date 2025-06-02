@@ -39,7 +39,7 @@ parser.add_argument('-j', '--workers', default=0, type=int, metavar='N', # 12 no
                     help='number of data loading workers (default: 32)')
 parser.add_argument('--epochs', default=250, type=int, metavar='N',
                     help='number of total epochs to run')
-parser.add_argument('-b', '--batch-size', default=256, type=int,
+parser.add_argument('-b', '--batch-size', default=128, type=int,
                     metavar='N',
                     help='mini-batch size (default: 256), this is the total '
                          'batch size of all GPUs on the current node when '
@@ -86,9 +86,9 @@ parser.add_argument('--stl_resize', default = 48)
 
 #ViT parameters
 parser.add_argument('--vit_patch_size', type=int, default=16, help='ViT patch size (e.g., 4 or 8)') # try it
-parser.add_argument('--vit_hidden_size', type=int, default=512, help='ViT hidden size') # only increase makes it worse
-parser.add_argument('--vit_layers', type=int, default=4, help='Number of transformer layers in ViT') # looks problematic to increase above 8, try 6 and 8
-parser.add_argument('--vit_heads', type=int, default=2, help='Number of attention heads in ViT') # remain same, must divide hidden size
+parser.add_argument('--vit_hidden_size', type=int, default=192, help='ViT hidden size') # only increase makes it worse
+parser.add_argument('--vit_layers', type=int, default=12, help='Number of transformer layers in ViT') # looks problematic to increase above 8, try 6 and 8
+parser.add_argument('--vit_heads', type=int, default=3, help='Number of attention heads in ViT') # remain same, must divide hidden size
 parser.add_argument('--vit_intermediate_size', type=int, default=None, help='Optional intermediate size (defaults to 4x hidden size if None)')
 parser.add_argument('--vit_pooling', type=str, choices=['cls', 'mean'], default='mean', help='Pooling strategy: CLS token or mean of patch tokens') # try both
 
@@ -166,7 +166,10 @@ def main():
         model = PCATransformerSimCLR(
             input_dim=pca_matrix.shape[0],
             out_dim=args.out_dim,
+            patch_size=args.vit_patch_size,
             hidden_dim=args.vit_hidden_size,
+            num_layers=args.vit_layers,
+            num_heads=args.vit_heads,
             dropout=args.dropout)
     else:
         model = PCASimCLR(

@@ -7,7 +7,7 @@ from torch.utils.data import random_split
 from torchvision import models
 from data_aug.contrastive_learning_dataset import ContrastiveLearningDataset
 from data_aug.view_generator import ContrastiveLearningViewGenerator, PCAAugmentorWrapper, PCAPlusTransformWrapper
-from models.resnet_simclr import ResNetSimCLR
+from models.resnet_simclr import ResNetSimCLR, PCATransformerSimCLR
 from simclr import SimCLR
 from PCAAugmentorSimCLR import PCAAugmentor
 import matplotlib.pyplot as plt
@@ -118,6 +118,8 @@ def main():
     # Data & augmentor setup
     dataset = ContrastiveLearningDataset(args.data, args.stl_resize)
     pca_augmentor, eigenvalues = setup_pca(args, dataset)
+
+    
     
     # Prepare training and validation dataloaders
     train_loader, val_loader, train_dataset = prepare_dataloaders(args, dataset, pca_augmentor, eigenvalues)
@@ -153,14 +155,11 @@ def main():
     # Visualize a few samples for sanity checking
     visualize_views(train_dataset, visualization_base_dataset, args)
 
+    
+
     resize = args.stl_resize if args.dataset_name == "stl10" else 32
     
-    """probe_train_dataset.transform = transforms.Compose([
-        transforms.Resize((resize, resize)),   # <- downsample images
-        transforms.ToTensor()])
-    probe_test_dataset.transform = transforms.Compose([
-        transforms.Resize((resize, resize)),   # <- downsample images
-        transforms.ToTensor()])"""
+    
 
     transform_list = []
     if not (args.dataset_name == "stl10" and args.stl_resize == 96):
@@ -172,7 +171,11 @@ def main():
 
     
     if args.vit:
-        model = ViTSimCLR(args)
+        model = PCATransformerSimCLR(
+            input_dim=3 * resize * resize,
+            out_dim=args.out_dim,
+            hidden_dim=args.vit_hidden_size,
+            dropout=args.dropout)
     else:
         model = ResNetSimCLR(base_model=args.arch, out_dim=args.out_dim, dropout = args.dropout)
 

@@ -208,7 +208,7 @@ def prepare_dataloaders(args, dataset, pca_augmentor, eigenvalues):
     s = 1
     size = args.stl_resize if args.dataset_name == 'stl10' else 32
     
-    if args.extra_transforms == 0 and args.vit:
+    if pca_augmentor and args.extra_transforms == 0 and args.vit:
         train_dataset.dataset.transform = PCAAugmentorWrapper(
             pca_augmentor=pca_augmentor,
             eigenvalues=eigenvalues)
@@ -256,13 +256,18 @@ def visualize_views(train_dataset, original_dataset, args):
     for i in range(15):
         img_views, label = train_dataset[i]
         img1, img2 = img_views[0].cpu(), img_views[1].cpu()
+        # Reshape flattened images if necessary (e.g., for flattened image-space transformer)
+        if img1.ndim == 1:
+            img1 = img1.view(3, 32, 32)
+        if img2.ndim == 1:
+            img2 = img2.view(3, 32, 32)
         if hasattr(train_dataset, 'indices'):
             original_index = train_dataset.indices[i]
         else:
             original_index = i
 
         original_img, _ = original_dataset[original_index]
-        original_tensor = transforms.ToTensor()(original_img)
+        original_tensor = original_img if isinstance(original_img, torch.Tensor) else transforms.ToTensor()(original_img)
 
         fig, axes = plt.subplots(1, 3, figsize=(12, 4))
         axes[0].imshow(F.to_pil_image(img1)); axes[0].set_title("Augmented View 1")

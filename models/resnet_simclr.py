@@ -163,6 +163,8 @@ class PCATransformerSimCLR(nn.Module):
     def forward(self, x):
         # Input x shape: [batch_size, input_dim]
         B = x.size(0)
+        if x.ndim == 4:  # [B, 3, H, W]
+            x = x.view(B, -1)
         x = x.contiguous().view(B, self.num_patches, self.patch_size)
         x = self.patch_embed(x)
         cls_tokens = self.cls_token.expand(B, -1, -1)
@@ -174,6 +176,8 @@ class PCATransformerSimCLR(nn.Module):
 
     def get_features(self, x):
         B = x.size(0)
+        if x.ndim == 4:  # [B, 3, H, W]
+            x = x.view(B, -1)
         x = x.contiguous().view(B, self.num_patches, self.patch_size)
         x = self.patch_embed(x)
         cls_tokens = self.cls_token.expand(B, -1, -1)

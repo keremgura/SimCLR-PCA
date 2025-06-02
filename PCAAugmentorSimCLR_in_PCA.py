@@ -246,12 +246,12 @@ class PCAAugmentor:
             view1 = img_flat @ p_input_full
             view2 = img_flat @ p_target_full
 
-        # Compute and print cosine similarity between views
+        """# Compute and print cosine similarity between views
         cos_sim = F.cosine_similarity(view1, view2, dim=1).item()
         #print(f"[DEBUG] Cosine similarity between views: {cos_sim:.4f}")
 
 
-        """view1 = F.normalize(view1, dim=1)
+        view1 = F.normalize(view1, dim=1)
         view2 = F.normalize(view2, dim=1)"""
 
         return view1.cpu(), view2.cpu()

@@ -76,9 +76,15 @@ def generate_experiment_name(args, prefix="simclr_in"):
     interpolate_flag = "interpolate" if args.interpolate else ""
     pad = str(args.pad_strategy)
     vit = "vit" if args.vit else "mlp"
+    patch = str(args.vit_patch_size)
+    hidden = str(args.vit_hidden_size)
+    layers = str(args.vit_layers)
+    heads = str(args.vit_heads)
+
+
     
     # Final name
-    experiment_name = f"{prefix}_pca_{dataset}_{pca_ratio_str}_{pca_flag}_{double}_{extra_flag}_{shuffle_flag}_{interpolate_flag}_{pad}_{drop_pc_ratio}_{vit}_{timestamp}"
+    experiment_name = f"{prefix}_pca_{dataset}_{pca_ratio_str}_{pca_flag}_{double}_{extra_flag}_{shuffle_flag}_{interpolate_flag}_{pad}_{drop_pc_ratio}_{vit}_{patch}_{hidden}_{layers}_{heads}_{timestamp}"
     return experiment_name
 
 # function to compute the minimum and maximum considering every image

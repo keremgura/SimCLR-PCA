@@ -68,6 +68,17 @@ class SimCLR(object):
         # save config file
         save_config_file(self.writer.log_dir, self.args)
 
+        if getattr(self.args, "vit", False):  # Only log ViT-specific settings if using ViT
+            logging.info("Using Vision Transformer with the following configuration:")
+            logging.info(f"  Patch size:         {self.args.vit_patch_size}")
+            logging.info(f"  Hidden size:        {self.args.vit_hidden_size}")
+            logging.info(f"  Num layers:         {self.args.vit_layers}")
+            logging.info(f"  Num attention heads:{self.args.vit_heads}")
+            logging.info(f"  Intermediate size:  {self.args.vit_intermediate_size or self.args.vit_hidden_size * 4}")
+            logging.info(f"  Pooling strategy:   {self.args.vit_pooling}")
+        else:
+            logging.info("Using ResNet encoder.")
+
         n_iter = 0
         logging.info(f"Start SimCLR training for {self.args.epochs} epochs.")
         logging.info(f"Training with gpu: {self.args.disable_cuda}.")

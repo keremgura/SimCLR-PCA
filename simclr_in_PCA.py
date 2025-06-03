@@ -245,7 +245,7 @@ class SimCLR(object):
         self.model.eval()
         input_dim = 512
         classifier, optimizer, criterion = get_linear_classifier(
-            out_dim=input_dim, device=self.args.device
+            out_dim=self.args.vit_hidden_size, device=self.args.device
         )
 
         # Split dataset: 80% train, 20% test

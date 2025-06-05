@@ -33,7 +33,11 @@ class PCAAugmentorWrapper:
         """
         Apply PCAAugmentor and return two PCA-masked views.
         """
-        img1, img2 = self.pca_augmentor.extract_views(img, self.eigenvalues)
+        #img1, img2 = self.pca_augmentor.extract_views(img, self.eigenvalues)
+
+        #img1, img2 = self.pca_augmentor.stochastic_patchwise_masking(img, self.eigenvalues, patch_size = 16)
+
+        img1, img2 = self.pca_augmentor.patchwise_cyclic_masking(img, self.eigenvalues, patch_size=8)
 
         # for simclr in pca
         if img1.dim() == 2:

@@ -242,3 +242,148 @@ class PCAAugmentor:
         
         return img_reconstructed.view(img.shape).cpu(), target.view(img.shape).cpu()
 
+    def stochastic_patchwise_masking(self, img, eigenvalues, patch_size=8):
+        """
+        Apply stochastic PCA masking per patch by randomly shuffling components
+        and retaining enough components to meet the variance threshold.
+        """
+        if not isinstance(img, torch.Tensor):
+            img = self.to_tensor(img)
+        img = img.to(self.device)
+        img_flat = img.view(-1)
+
+                
+        variance_ratio = self.pca_ratio
+
+        def apply_patchwise_masking():
+            C, H, W = img.shape
+            P = self.masking_fn_
+            eigvals = eigenvalues.cpu().numpy()
+            total_components = P.shape[1]
+            total_variance = np.sum(eigvals)
+
+        
+            patches = []
+            for i in range(0, H, patch_size):
+                for j in range(0, W, patch_size):
+                    patch = img[:, i:i+patch_size, j:j+patch_size]
+                    patch_flat = patch.contiguous().view(-1)
+
+                    # shuffle PCA components
+                    indices = np.random.permutation(total_components)
+                    eigvals_shuffled = eigvals[indices]
+                    cumsum = np.cumsum(eigvals_shuffled)
+                    num_to_retain = np.argmax(cumsum >= variance_ratio * total_variance) + 1
+
+                    retained_indices = indices[:num_to_retain]
+                    # For now, assume PCA basis rows are consistent with flattened patch layout
+                    # (More robust row slicing logic can be added later)
+                    P_patch = P[:patch_flat.shape[0], :]
+                    P_subset = P_patch[:, retained_indices]
+                    
+                    projected = patch_flat @ P_subset
+                    reconstructed = projected @ P_subset.T
+
+                    patch_recon = reconstructed.view(C, patch_size, patch_size)
+                    patches.append(patch_recon)
+
+            # stitch patches back
+            recon_img = torch.zeros_like(img)
+            count = 0
+            for i in range(0, H, patch_size):
+                for j in range(0, W, patch_size):
+                    recon_img[:, i:i+patch_size, j:j+patch_size] = patches[count]
+                    count += 1
+
+            recon_img -= recon_img.min()
+            denom = recon_img.max() - recon_img.min()
+            if denom < 1e-4:
+                denom = 1e-4
+            recon_img /= denom
+
+            return recon_img.cpu()
+
+        if self.double:
+            view1 = apply_patchwise_masking()
+            view2 = apply_patchwise_masking()
+            return view1, view2
+        else:
+            return apply_patchwise_masking()
+
+    
+    def patchwise_cyclic_masking(self, img, eigenvalues, patch_size=8):
+        """
+        Apply cyclic PCA masking per patch based on explained variance.
+        Each patch selects a different subset of components starting from a cyclically shifted
+        variance threshold. If self.double is True, return two such views.
+        """
+        if not isinstance(img, torch.Tensor):
+            img = self.to_tensor(img)
+        img = img.to(self.device)
+
+        P = self.masking_fn_
+        C, H, W = img.shape
+        eigvals = eigenvalues.cpu().numpy()
+        sorted_indices = np.argsort(-eigvals)
+        sorted_eigvals = eigvals[sorted_indices]
+        cumsum = np.cumsum(sorted_eigvals)
+        total_variance = cumsum[-1]
+
+        def get_indices_for_patch(i, j, base_fraction, window_fraction):
+            patch_index = (i // patch_size) * (W // patch_size) + (j // patch_size)
+            offset = patch_index * base_fraction
+            start_var = (offset % 1.0) * total_variance
+            end_var = min(start_var + window_fraction * total_variance, total_variance)
+
+
+            if end_var <= total_variance:
+                mask = (cumsum >= start_var) & (cumsum <= end_var)
+                selected = np.where(mask)[0]
+            else:
+                mask1 = (cumsum >= start_var)
+                mask2 = (cumsum <= (end_var - total_variance))
+                selected = np.concatenate([np.where(mask1)[0], np.where(mask2)[0]])
+                
+            if len(selected) == 0:
+                selected = np.where(cumsum >= start_var)[0][:1]
+            return sorted_indices[selected]
+
+        def apply_patchwise_cyclic(base_fraction):
+            patches = []
+            for i in range(0, H, patch_size):
+                for j in range(0, W, patch_size):
+                    patch = img[:, i:i+patch_size, j:j+patch_size]
+                    patch_flat = patch.contiguous().view(-1)
+                    indices = get_indices_for_patch(i, j, base_fraction, self.pca_ratio)
+                    P_patch = P[:patch_flat.shape[0], :]
+                    P_subset = P_patch[:, indices]
+                    projected = patch_flat @ P_subset
+                    reconstructed = projected @ P_subset.T
+                    patch_recon = reconstructed.view(C, patch_size, patch_size)
+                    patches.append(patch_recon)
+
+            recon_img = torch.zeros_like(img)
+            count = 0
+            for i in range(0, H, patch_size):
+                for j in range(0, W, patch_size):
+                    recon_img[:, i:i+patch_size, j:j+patch_size] = patches[count]
+                    count += 1
+
+            if self.normalize:
+                recon_img -= recon_img.min()
+                denom = recon_img.max() - recon_img.min()
+                if denom < 1e-4:
+                    denom = 1e-4
+                recon_img /= denom
+
+            return recon_img.cpu()
+
+        if self.double:
+            view1 = apply_patchwise_cyclic(base_fraction=0.15)
+            view2 = apply_patchwise_cyclic(base_fraction=0.35)
+            return view1, view2
+        else:
+            return apply_patchwise_cyclic(base_fraction=0.15)
+
+
+

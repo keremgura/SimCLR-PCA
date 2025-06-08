@@ -67,6 +67,7 @@ def generate_experiment_name(args, prefix="simclr"):
     # Base components
     dataset = str(args.dataset_name)
     pca_ratio_str = str(args.pca_ratio).replace(".", "")
+    masking = args.masking_method
     drop_ratio_str = f"drop_ratio_{args.drop_pc_ratio}"
     pca_flag = "pca" if args.pca == 1 else "no_pca"
     extra_flag = f"extra{args.extra_transforms}"
@@ -89,6 +90,7 @@ def generate_experiment_name(args, prefix="simclr"):
         prefix,
         dataset,
         f"pca_{pca_ratio_str}",
+        masking,
         pca_flag,
         double_flag,
         extra_flag,
@@ -150,7 +152,7 @@ def setup_pca(args, dataset):
 
 
     pca_augmentor = PCAAugmentor(pca_matrix.T, pca_ratio=args.pca_ratio, 
-                                device=args.device, drop_ratio = args.drop_pc_ratio, shuffle = args.shuffle, 
+                                device=args.device, drop_ratio = args.drop_pc_ratio, shuffle = args.shuffle, base_fractions = args.base_fractions,
                                 drop_strategy = args.drop_strategy, double = args.double, 
                                 interpolate= args.interpolate, pad_strategy = args.pad_strategy)
 
@@ -228,6 +230,8 @@ def prepare_dataloaders(args, dataset, pca_augmentor, eigenvalues):
             transform_list.append(PCAPlusTransformWrapper(pca_augmentor=pca_augmentor,
                 eigenvalues=eigenvalues,
                 extra_augmentations=extra_augmentations,
+                masking_method=args.masking_method,
+                patch_size=args.patch_size,
                 n_views=args.n_views))
             train_dataset.transform = transforms.Compose(transform_list)
             
@@ -235,6 +239,8 @@ def prepare_dataloaders(args, dataset, pca_augmentor, eigenvalues):
             train_dataset.dataset.transform = PCAPlusTransformWrapper(
                 pca_augmentor=pca_augmentor,
                 eigenvalues=eigenvalues,
+                masking_method=args.masking_method,
+                patch_size=args.patch_size,
                 extra_augmentations=extra_augmentations,
                 n_views=args.n_views
             )

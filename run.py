@@ -87,6 +87,9 @@ parser.add_argument('--double', action='store_true', help = 'enables double shuf
 parser.add_argument('--interpolate', action='store_true', help = 'enables interpolating')
 parser.add_argument('--pad_strategy', default = "random", choices = ["hybrid", "pad", "mean", "gaussian", "random"])
 parser.add_argument('--stl_resize', default = 96, type = int)
+parser.add_argument('--masking_method', default = "global", choices = ["global", "stochastic", "cyclical", "auto", "combined"])
+parser.add_argument("--base_fractions", type=float, nargs=2, default=[0.1, 0.4], help="Two base fractions for cyclic PCA masking shift per view")
+parser.add_argument("--patch_size", default = 16, type = int)
 
 #ViT parameters
 parser.add_argument('--vit_patch_size', type=int, default=8, help='ViT patch size (e.g., 4 or 8)') # try it
@@ -116,7 +119,7 @@ def main():
 
 
     # Data & augmentor setup
-    dataset = ContrastiveLearningDataset(args.data, args.stl_resize)
+    dataset = ContrastiveLearningDataset(args.data, args.stl_resize, args.masking_method, args.patch_size)
     pca_augmentor, eigenvalues = setup_pca(args, dataset)
 
     

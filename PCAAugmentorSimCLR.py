@@ -4,7 +4,7 @@ import torchvision.transforms as transforms
 import torch.nn.functional as F
 
 class PCAAugmentor:
-    def __init__(self, masking_fn_, pca_ratio, shuffle, global_min = None, global_max = None, device="cpu", img_size=32, normalize = True, drop_ratio = 0, drop_strategy = "random", double = False, interpolate = False, pad_strategy = "pad"):
+    def __init__(self, masking_fn_, pca_ratio, shuffle, base_fractions, global_min = None, global_max = None, device="cpu", img_size=32, normalize = True, drop_ratio = 0, drop_strategy = "random", double = False, interpolate = False, pad_strategy = "pad"):
         """
         Initializes the PCA-based augmentor.
         
@@ -23,6 +23,7 @@ class PCAAugmentor:
         self.global_max = global_max
         self.drop_ratio = drop_ratio
         self.shuffle = shuffle
+        self.base_fractions = base_fractions
         self.drop_strategy = drop_strategy
         self.double = double
         self.interpolate = interpolate
@@ -303,12 +304,10 @@ class PCAAugmentor:
 
             return recon_img.cpu()
 
-        if self.double:
-            view1 = apply_patchwise_masking()
-            view2 = apply_patchwise_masking()
-            return view1, view2
-        else:
-            return apply_patchwise_masking()
+        view1 = apply_patchwise_masking()
+        view2 = apply_patchwise_masking()
+        return view1, view2
+        
 
     
     def patchwise_cyclic_masking(self, img, eigenvalues, patch_size=8):
@@ -378,12 +377,10 @@ class PCAAugmentor:
 
             return recon_img.cpu()
 
-        if self.double:
-            view1 = apply_patchwise_cyclic(base_fraction=0.15)
-            view2 = apply_patchwise_cyclic(base_fraction=0.35)
-            return view1, view2
-        else:
-            return apply_patchwise_cyclic(base_fraction=0.15)
+        view1 = apply_patchwise_cyclic(base_fraction=self.base_fractions[0])
+        view2 = apply_patchwise_cyclic(base_fraction=self.base_fractions[1])
+        return view1, view2
+        
 
 
 

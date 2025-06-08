@@ -7,9 +7,11 @@ from exceptions.exceptions import InvalidDatasetSelection
 
 
 class ContrastiveLearningDataset:
-    def __init__(self, root_folder, resize):
+    def __init__(self, root_folder, resize, masking_method, patch_size):
         self.root_folder = root_folder
         self.resize = resize
+        self.masking_method = masking_method
+        self.patch_size = patch_size
 
     @staticmethod
     def get_simclr_pipeline_transform(size, s=1):
@@ -59,12 +61,12 @@ class ContrastiveLearningDataset:
             if extra_augmentations:
                 transform = transforms.Compose([
                     resize_transform,
-                    PCAPlusTransformWrapper(pca_augmentor, eigenvalues, extra_augmentations)
+                    PCAPlusTransformWrapper(pca_augmentor, eigenvalues, self.masking_method, self.patch_size, extra_augmentations)
                 ])
             else:
                 transform = transforms.Compose([
                     resize_transform,
-                    PCAAugmentorWrapper(pca_augmentor, eigenvalues)
+                    PCAAugmentorWrapper(pca_augmentor, eigenvalues, self.masking_method, self.patch_size)
                 ])
         
         ### 🧩 CASE 2: SimCLR augmentations

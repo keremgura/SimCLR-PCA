@@ -172,9 +172,16 @@ class PCAAugmentor:
             mask[keep_indices] = False
             drop_indices = all_indices[mask]
 
+            mean_by_own = True
+
             if strategy == "mean":
-                mean_vector = P_full[:, keep_indices].mean(dim=1, keepdim=True)
-                P_padded[:, drop_indices] = mean_vector
+                if mean_by_own:
+                    mean_values = P_full[:, drop_indices].mean(dim=0, keepdim=True)  # Shape: (1, num_drop)
+                    # Expand to batch size and assign to padded matrix
+                    P_padded[:, drop_indices] = mean_values.expand(P_full.shape[0], -1)
+                else:
+                    mean_vector = P_full[:, keep_indices].mean(dim=1, keepdim=True)
+                    P_padded[:, drop_indices] = mean_vector
             elif strategy == "gaussian":
                 noise = torch.randn((P_full.shape[0], len(drop_indices)), device=device) * std
                 P_padded[:, drop_indices] = noise
@@ -185,8 +192,12 @@ class PCAAugmentor:
                 mean_indices = drop_indices[mean_mask]
                 gaussian_indices = drop_indices[gaussian_mask]
                 if len(mean_indices) > 0:
-                    mean_vector = P_full[:, keep_indices].mean(dim=1, keepdim=True)
-                    P_padded[:, mean_indices] = mean_vector
+                    if mean_by_own:
+                        mean_values = P_full[:, mean_indices].mean(dim=0, keepdim=True)
+                        P_padded[:, mean_indices] = mean_values.expand(P_full.shape[0], -1)
+                    else:
+                        mean_vector = P_full[:, keep_indices].mean(dim=1, keepdim=True)
+                        P_padded[:, mean_indices] = mean_vector
                 if len(gaussian_indices) > 0:
                     noise = torch.randn((P_full.shape[0], len(gaussian_indices)), device=device) * std
                     P_padded[:, gaussian_indices] = noise

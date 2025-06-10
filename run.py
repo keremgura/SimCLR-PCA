@@ -7,7 +7,7 @@ from torch.utils.data import random_split
 from torchvision import models
 from data_aug.contrastive_learning_dataset import ContrastiveLearningDataset
 from data_aug.view_generator import ContrastiveLearningViewGenerator, PCAAugmentorWrapper, PCAPlusTransformWrapper
-from models.resnet_simclr import ResNetSimCLR, PCATransformerSimCLR
+from models.resnet_simclr import ResNetSimCLR, PCATransformerSimCLR, SimCLRViTModel
 from simclr import SimCLR
 from PCAAugmentorSimCLR import PCAAugmentor
 import matplotlib.pyplot as plt
@@ -88,8 +88,8 @@ parser.add_argument('--interpolate', action='store_true', help = 'enables interp
 parser.add_argument('--pad_strategy', default = "random", choices = ["hybrid", "pad", "mean", "gaussian", "random"])
 parser.add_argument('--stl_resize', default = 96, type = int)
 parser.add_argument('--masking_method', default = "global", choices = ["global", "stochastic", "cyclical", "auto", "combined"])
-parser.add_argument("--base_fractions", type=float, nargs=2, default=[0.1, 0.4], help="Two base fractions for cyclic PCA masking shift per view")
-parser.add_argument("--patch_size", default = 16, type = int)
+parser.add_argument("--base_fractions", type=float, nargs=2, default=[0.1, 0.3], help="Two base fractions for cyclic PCA masking shift per view")
+parser.add_argument("--patch_size", default = 8, type = int)
 
 #ViT parameters
 parser.add_argument('--vit_patch_size', type=int, default=8, help='ViT patch size (e.g., 4 or 8)') # try it
@@ -112,12 +112,13 @@ def main():
         args.device = torch.device('cuda')
         cudnn.deterministic = True
         cudnn.benchmark = True
+        
     else:
         args.device = torch.device('cpu')
         args.gpu_index = -1
 
 
-
+    
     # Data & augmentor setup
     dataset = ContrastiveLearningDataset(args.data, args.stl_resize, args.masking_method, args.patch_size)
     pca_augmentor, eigenvalues = setup_pca(args, dataset)
@@ -174,7 +175,7 @@ def main():
 
     
     if args.vit:
-        model = PCATransformerSimCLR(
+        model = SimCLRViTModel(
             input_dim=3 * resize * resize,
             out_dim=args.out_dim,
             hidden_dim=args.vit_hidden_size,
@@ -183,9 +184,27 @@ def main():
         model = ResNetSimCLR(base_model=args.arch, out_dim=args.out_dim, dropout = args.dropout)
 
     optimizer = torch.optim.Adam(model.parameters(), args.lr, weight_decay=args.weight_decay)
+    #optimizer = torch.optim.AdamW(model.parameters(), args.lr, weight_decay=args.weight_decay)
 
     scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=len(train_loader), eta_min=0,
                                                            last_epoch=-1)
+
+    """def get_warmup_cosine_scheduler(optimizer, warmup_iteration, max_iteration):
+        def _warmup_cosine(step):
+            if step < warmup_iteration:
+                lr_ratio = step * 1.0 / warmup_iteration
+            else:
+                where = (step - warmup_iteration) * 1.0 / (max_iteration - warmup_iteration)
+                lr_ratio = 0.5 * (1 + math.cos(math.pi * where))
+
+            return lr_ratio
+
+        return torch.optim.lr_scheduler.LambdaLR(optimizer, _warmup_cosine)
+    iters_per_epoch = len(train_dataset) / batch_size
+    lr_scheduler = get_warmup_cosine_scheduler(
+        optimizer,
+        warmup_iteration=int(iters_per_epoch * cfg.warmup_epochs),
+        max_iteration=int(iters_per_epoch * num_epochs),)"""
 
     #  It’s a no-op if the 'gpu_index' argument is a negative integer or None.
     with torch.cuda.device(args.gpu_index):

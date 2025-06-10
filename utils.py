@@ -7,7 +7,7 @@ import yaml
 from datetime import datetime
 from data_aug.contrastive_learning_dataset import ContrastiveLearningDataset
 from data_aug.view_generator import ContrastiveLearningViewGenerator, PCAAugmentorWrapper, PCAPlusTransformWrapper
-from models.resnet_simclr import ResNetSimCLR
+from models.resnet_simclr import ResNetSimCLR, SimCLRViTModel
 from PCAAugmentorSimCLR import PCAAugmentor
 from data_aug.gaussian_blur import GaussianBlur
 import matplotlib.pyplot as plt
@@ -213,7 +213,9 @@ def prepare_dataloaders(args, dataset, pca_augmentor, eigenvalues):
     if pca_augmentor and args.extra_transforms == 0 and args.vit:
         train_dataset.dataset.transform = PCAAugmentorWrapper(
             pca_augmentor=pca_augmentor,
-            eigenvalues=eigenvalues)
+            eigenvalues=eigenvalues,
+            masking_method=args.masking_method,
+            patch_size=args.patch_size)
 
     if args.extra_transforms == 1: # apply a light version of augmentations
         if args.dataset_name == 'stl10':

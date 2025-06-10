@@ -3,6 +3,8 @@ import torchvision.models as models
 from transformers import ViTConfig, ViTModel
 import torch.nn.functional as F
 import torch
+import timm
+from torch.nn import SyncBatchNorm
 
 from exceptions.exceptions import InvalidBackboneError
 
@@ -188,4 +190,49 @@ class PCATransformerSimCLR(nn.Module):
         return F.normalize(x, dim=1)
 
 
+
+
+class SimCLRProjectionHead(nn.Module):
+    """
+    3-layer projection head for SimCLR: input_dim -> hidden_dim -> hidden_dim -> output_dim
+    """
+    def __init__(self, input_dim, output_dim, hidden_dim=4096):
+        super().__init__()
+        bn = SyncBatchNorm
+        self.net = nn.Sequential(
+            nn.Linear(input_dim, hidden_dim),
+            bn(hidden_dim),
+            nn.ReLU(inplace=True),
+            nn.Linear(hidden_dim, hidden_dim),
+            bn(hidden_dim),
+            nn.ReLU(inplace=True),
+            nn.Linear(hidden_dim, output_dim),
+        )
+    def forward(self, x):
+        return self.net(x)
+
+class SimCLRViTModel(nn.Module):
+    """
+    Vision Transformer trunk + SimCLR projection head
+    """
+    def __init__(self, vit_model_name, image_size, patch_size, hidden_size, layers, heads, intermediate_size, simclr_embed_dim, freeze_patch_embed=False):
+        super().__init__()
+        # 1) instantiate ViT backbone from timm
+        self.trunk = timm.create_model(vit_model_name, pretrained=False, img_size=image_size, drop_rate=0.0)
+        # 2) remove classification head
+        if hasattr(self.trunk, 'head'):
+            self.trunk.head = nn.Identity()
+        elif hasattr(self.trunk, 'fc'):
+            self.trunk.fc = nn.Identity()
+        # 3) optional patch embed freezing
+        if freeze_patch_embed and hasattr(self.trunk, 'patch_embed'):
+            for p in self.trunk.patch_embed.parameters():
+                p.requires_grad = False
+        # 4) projection head
+        vit_dim = self.trunk.num_features
+        self.ssl_head = SimCLRProjectionHead(vit_dim, simclr_embed_dim)
+
+    def forward(self, x):
+        features = self.trunk.forward_features(x)
+        return self.ssl_head(features)
 

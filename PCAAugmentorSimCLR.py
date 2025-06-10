@@ -254,6 +254,18 @@ class PCAAugmentor:
         
         return img_reconstructed.view(img.shape).cpu(), target.view(img.shape).cpu()
 
+
+    def get_patch_row_indices(self, i, j, patch_size, img_size):
+        indices = []
+        for c in range(3):  # R,G,B
+            base = c * img_size * img_size
+            for dy in range(patch_size):
+                for dx in range(patch_size):
+                    y = i + dy
+                    x = j + dx
+                    indices.append(base + y*img_size + x)
+        return indices
+
     def stochastic_patchwise_masking(self, img, eigenvalues, patch_size=8):
         """
         Apply stochastic PCA masking per patch by randomly shuffling components
@@ -267,6 +279,8 @@ class PCAAugmentor:
                 
         variance_ratio = self.pca_ratio
 
+        
+
         def apply_patchwise_masking():
             C, H, W = img.shape
             P = self.masking_fn_
@@ -274,7 +288,6 @@ class PCAAugmentor:
             total_components = P.shape[1]
             total_variance = np.sum(eigvals)
 
-        
             patches = []
             for i in range(0, H, patch_size):
                 for j in range(0, W, patch_size):
@@ -290,7 +303,9 @@ class PCAAugmentor:
                     retained_indices = indices[:num_to_retain]
                     # For now, assume PCA basis rows are consistent with flattened patch layout
                     # (More robust row slicing logic can be added later)
-                    P_patch = P[:patch_flat.shape[0], :]
+                    #P_patch = P[:patch_flat.shape[0], :]
+                    row_ids = self.get_patch_row_indices(i, j, patch_size, H)
+                    P_patch = P[row_ids, :] 
                     P_subset = P_patch[:, retained_indices]
                     
                     projected = patch_flat @ P_subset
@@ -365,8 +380,10 @@ class PCAAugmentor:
                     patch = img[:, i:i+patch_size, j:j+patch_size]
                     patch_flat = patch.contiguous().view(-1)
                     indices = get_indices_for_patch(i, j, base_fraction, self.pca_ratio)
-                    P_patch = P[:patch_flat.shape[0], :]
+                    row_ids = self.get_patch_row_indices(i, j, patch_size, H)
+                    P_patch = P[row_ids, :] 
                     P_subset = P_patch[:, indices]
+
                     projected = patch_flat @ P_subset
                     reconstructed = projected @ P_subset.T
                     patch_recon = reconstructed.view(C, patch_size, patch_size)

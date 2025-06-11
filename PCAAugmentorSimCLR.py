@@ -13,7 +13,7 @@ class PCAAugmentor:
             pca_ratio: The fraction of PCA components to mask.
             device: Device to run computations on.
         """
-        self.masking_fn_ = masking_fn_.to(device)  # PCA transformation matrix
+        self.masking_fn_ = masking_fn_.to(device)  # PCA transformation matrix     
         self.pca_ratio = pca_ratio  # How much variance to retain
         self.device = device
         self.img_size = img_size
@@ -98,6 +98,7 @@ class PCAAugmentor:
                     selected = retain_indices if threshold == 0 else retain_indices[:threshold]
 
             return torch.tensor(selected.copy(), dtype=torch.long, device=self.device)
+            #return torch.tensor(selected.copy(), dtype=torch.long)
 
 
         # Apply slight randomization to drop and retain ratios for both input and target
@@ -162,6 +163,8 @@ class PCAAugmentor:
         
         def pad_matrix(P_full, keep_indices, strategy="pad", target_dim=None, std=0.01):
             device = P_full.device
+            #device = torch.device("cpu")
+            
             D = P_full.shape[1]
             target_dim = target_dim or D
             P_padded = torch.zeros_like(P_full)
@@ -255,6 +258,94 @@ class PCAAugmentor:
         return img_reconstructed.view(img.shape).cpu(), target.view(img.shape).cpu()
 
 
+    def extract_views_batch(self, imgs: torch.Tensor, eigenvalues: torch.Tensor):
+        """
+        Batched PCA-based augmentation. Operates on GPU.
+        
+        Args:
+            imgs: Tensor of shape (B, C, H, W)
+            eigenvalues: Tensor of shape (B, D)
+        
+        Returns:
+            Two views (img1, img2) of shape (B, C, H, W), projected via masked PCA bases.
+        """
+        def pad_matrix(P_full, keep_indices, strategy="pad", target_dim=None, std=0.01):
+            device = P_full.device
+            D = P_full.shape[1]
+            target_dim = target_dim or D
+            P_padded = torch.zeros_like(P_full)
+            P_padded[:, keep_indices] = P_full[:, keep_indices]
+
+            all_indices = torch.arange(target_dim, device=device)
+            mask = torch.ones(target_dim, dtype=torch.bool, device=device)
+            mask[keep_indices] = False
+            drop_indices = all_indices[mask]
+
+            mean_by_own = True
+
+            if strategy == "mean":
+                if mean_by_own:
+                    mean_values = P_full[:, drop_indices].mean(dim=0, keepdim=True)
+                    P_padded[:, drop_indices] = mean_values.expand(P_full.shape[0], -1)
+                else:
+                    mean_vector = P_full[:, keep_indices].mean(dim=1, keepdim=True)
+                    P_padded[:, drop_indices] = mean_vector
+            elif strategy == "gaussian":
+                noise = torch.randn((P_full.shape[0], len(drop_indices)), device=device) * std
+                P_padded[:, drop_indices] = noise
+            elif strategy == "hybrid":
+                rand_vals = torch.rand(len(drop_indices), device=device)
+                mean_mask = rand_vals < 0.4
+                gaussian_mask = (rand_vals >= 0.4) & (rand_vals < 0.6)
+                mean_indices = drop_indices[mean_mask]
+                gaussian_indices = drop_indices[gaussian_mask]
+                if len(mean_indices) > 0:
+                    if mean_by_own:
+                        mean_values = P_full[:, mean_indices].mean(dim=0, keepdim=True)
+                        P_padded[:, mean_indices] = mean_values.expand(P_full.shape[0], -1)
+                    else:
+                        mean_vector = P_full[:, keep_indices].mean(dim=1, keepdim=True)
+                        P_padded[:, mean_indices] = mean_vector
+                if len(gaussian_indices) > 0:
+                    noise = torch.randn((P_full.shape[0], len(gaussian_indices)), device=device) * std
+                    P_padded[:, gaussian_indices] = noise
+            return P_padded
+
+        # imgs: (B, C, H, W), eigenvalues: (B, D)
+        B, C, H, W = imgs.shape
+        imgs = imgs.to(self.device)
+        img_flat = imgs.view(B, -1)
+
+        # For each sample in batch, compute pc masks
+        pc_masks = [self.compute_pc_mask(eigenvalues[i]) for i in range(B)]
+
+        # Only support non-interpolate mode for batch for now (for simplicity)
+        img_reconstructed = []
+        target = []
+        for i in range(B):
+            pc_mask_input, pc_mask = pc_masks[i]
+            p_input = self.masking_fn_[:, pc_mask_input]
+            p_target = self.masking_fn_[:, pc_mask]
+            v1 = (img_flat[i:i+1] @ p_input) @ p_input.T
+            v2 = (img_flat[i:i+1] @ p_target) @ p_target.T
+            img_reconstructed.append(v1)
+            target.append(v2)
+        img_reconstructed = torch.cat(img_reconstructed, dim=0)
+        target = torch.cat(target, dim=0)
+
+        # Normalize both views to [0,1] per sample in batch
+        if self.normalize:
+            img_reconstructed = (img_reconstructed - img_reconstructed.min(dim=1, keepdim=True)[0]) / \
+                                (img_reconstructed.max(dim=1, keepdim=True)[0] - img_reconstructed.min(dim=1, keepdim=True)[0] + 1e-4)
+            target = (target - target.min(dim=1, keepdim=True)[0]) / \
+                    (target.max(dim=1, keepdim=True)[0] - target.min(dim=1, keepdim=True)[0] + 1e-4)
+
+        return img_reconstructed.view(B, C, H, W).cpu(), target.view(B, C, H, W).cpu()
+
+
+    
+
+
     def get_patch_row_indices(self, i, j, patch_size, img_size):
         indices = []
         for c in range(3):  # R,G,B
@@ -276,11 +367,8 @@ class PCAAugmentor:
         img = img.to(self.device)
         img_flat = img.view(-1)
 
-                
-        variance_ratio = self.pca_ratio
-
+        mask_randomize = 0.2
         
-
         def apply_patchwise_masking():
             C, H, W = img.shape
             P = self.masking_fn_
@@ -293,6 +381,9 @@ class PCAAugmentor:
                 for j in range(0, W, patch_size):
                     patch = img[:, i:i+patch_size, j:j+patch_size]
                     patch_flat = patch.contiguous().view(-1)
+
+                    variance_ratio = self.pca_ratio + np.random.uniform(-mask_randomize, mask_randomize)
+                    
 
                     # shuffle PCA components
                     indices = np.random.permutation(total_components)
@@ -377,9 +468,13 @@ class PCAAugmentor:
             patches = []
             for i in range(0, H, patch_size):
                 for j in range(0, W, patch_size):
+                    mask_randomize = 0.2
+                    variance_ratio = self.pca_ratio + np.random.uniform(-mask_randomize, mask_randomize)
+                    
+                    
                     patch = img[:, i:i+patch_size, j:j+patch_size]
                     patch_flat = patch.contiguous().view(-1)
-                    indices = get_indices_for_patch(i, j, base_fraction, self.pca_ratio)
+                    indices = get_indices_for_patch(i, j, base_fraction, variance_ratio)
                     row_ids = self.get_patch_row_indices(i, j, patch_size, H)
                     P_patch = P[row_ids, :] 
                     P_subset = P_patch[:, indices]

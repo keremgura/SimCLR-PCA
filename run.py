@@ -175,11 +175,11 @@ def main():
 
     
     if args.vit:
-        model = SimCLRViTModel(
-            input_dim=3 * resize * resize,
-            out_dim=args.out_dim,
-            hidden_dim=args.vit_hidden_size,
-            dropout=args.dropout)
+        model = SimCLRViTModel(vit_model_name="vit_tiny_patch16_224", image_size=resize, patch_size=args.vit_patch_size, hidden_size = args.vit_hidden_size, layers= args.vit_layers,
+            heads=args.vit_heads,
+            intermediate_size=args.vit_intermediate_size or args.vit_hidden_size * 4,
+            simclr_embed_dim=512,
+            freeze_patch_embed=True)
     else:
         model = ResNetSimCLR(base_model=args.arch, out_dim=args.out_dim, dropout = args.dropout)
 

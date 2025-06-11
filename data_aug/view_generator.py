@@ -62,7 +62,8 @@ class PCAAugmentorWrapper:
 
         
         return [img1, img2]
-        #return [img1.half(), img2.half()]
+        """return img""" # for batch extract views
+        
         
 
 

@@ -83,9 +83,7 @@ class SimCLR(object):
         logging.info(f"Start SimCLR training for {self.args.epochs} epochs.")
         logging.info(f"Training with gpu: {self.args.disable_cuda}.")
 
-        """print(">> Testing first batch manually")
-        batch = next(iter(train_loader))
-        print(">> Batch retrieved:", type(batch), len(batch))"""
+        
         for epoch_counter in range(self.args.epochs):
             self.model.train()
             epoch_start_time = time.time()
@@ -95,10 +93,24 @@ class SimCLR(object):
             for images, _ in tqdm(train_loader):
                 start_time = time.time()
                 load_start = time.time()
+
+                """images = images.to(self.args.device, non_blocking=True)
+                # Retrieve corresponding eigenvalues for the batch (adjust indexing as needed)
+                # e.g., if using DistributedSampler, also track global indices
+                eigenvalues = self.eigenvalues_tensor[batch_indices].to(self.args.device)
+
+                # Apply batched PCA masking to get two views
+                view1, view2 = self.pca_augmentor.extract_views(images, eigenvalues)
+
+                # Concatenate both views for contrastive loss
+                images = torch.cat([view1, view2], dim=0) """
                 
                 images = torch.cat(images, dim=0)
                 start = time.time()
                 images = images.to(self.args.device, non_blocking = True)
+
+                torch.cuda.synchronize()
+                
                 #print("device:", time.time() - start)
                 load_end = time.time()
 
@@ -155,6 +167,10 @@ class SimCLR(object):
             logging.debug(f"Epoch: {epoch_counter}\tLoss: {avg_loss:.4f}\tTop1 accuracy: {avg_top1:.2f}")
             self.writer.add_scalar('train/epoch_loss', avg_loss, epoch_counter)
             self.writer.add_scalar('train/epoch_top1', avg_top1, epoch_counter)
+
+            """print(f"[Epoch {epoch_counter}] GPU Max Allocated: {torch.cuda.max_memory_allocated() / 1e6:.1f} MB")
+            print(f"[Epoch {epoch_counter}] GPU Max Reserved: {torch.cuda.max_memory_reserved() / 1e6:.1f} MB")"""
+
 
             """wandb.log({
                 'train/epoch_loss': avg_loss,

@@ -5,6 +5,7 @@ import torch.nn.functional as F
 import torch
 import timm
 from torch.nn import SyncBatchNorm
+from torch.nn import BatchNorm1d
 
 from exceptions.exceptions import InvalidBackboneError
 
@@ -198,7 +199,8 @@ class SimCLRProjectionHead(nn.Module):
     """
     def __init__(self, input_dim, output_dim, hidden_dim=4096):
         super().__init__()
-        bn = SyncBatchNorm
+        #bn = SyncBatchNorm
+        bn = BatchNorm1d
         self.net = nn.Sequential(
             nn.Linear(input_dim, hidden_dim),
             bn(hidden_dim),
@@ -234,5 +236,8 @@ class SimCLRViTModel(nn.Module):
 
     def forward(self, x):
         features = self.trunk.forward_features(x)
+
+        if features.dim() == 3:
+            features = features[:, 0]
         return self.ssl_head(features)
 

@@ -146,7 +146,7 @@ class PCATransformerSimCLR(nn.Module):
         encoder_layer = nn.TransformerEncoderLayer(
             d_model=hidden_dim,
             nhead=num_heads,
-            dim_feedforward=hidden_dim * 2,
+            dim_feedforward=hidden_dim * 4,
             dropout=dropout,
             activation='gelu',
             batch_first=True

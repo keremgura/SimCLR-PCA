@@ -16,6 +16,8 @@ import torchvision.transforms as transforms
 from tqdm import tqdm
 import torch.nn as nn
 from torch.utils.data import DataLoader, random_split
+from torch.optim import lr_scheduler  # ensure this is at the top of the file
+
 
 
 
@@ -304,3 +306,21 @@ def visualize_views(train_dataset, original_dataset, args):
         plt.close(fig)
 
     print(f"[✓] Visualizations saved to: {save_folder}")
+
+class LinearWarmupScheduler:
+    def __init__(self, optimizer, warmup_epochs, total_epochs, target_lr):
+        self.optimizer = optimizer
+        self.warmup_epochs = warmup_epochs
+        self.total_epochs = total_epochs
+        self.target_lr = target_lr
+        self.base_lr = 0.0
+        self.annealing_scheduler = lr_scheduler.CosineAnnealingLR(optimizer, total_epochs - warmup_epochs, eta_min=0)
+
+    def step(self, epoch):
+        if epoch < self.warmup_epochs:
+            lr = self.base_lr + (self.target_lr - self.base_lr) * (epoch / self.warmup_epochs)
+            
+            for param_group in self.optimizer.param_groups:
+                param_group['lr'] = lr
+        else:
+            self.annealing_scheduler.step(epoch - self.warmup_epochs)

@@ -18,7 +18,8 @@ from utils import (
     compute_dataset_min_max,
     setup_pca,
     prepare_dataloaders,
-    visualize_views)
+    visualize_views,
+    LinearWarmupScheduler)
 import wandb
 from wandb.sdk.wandb_settings import Settings
 
@@ -90,6 +91,8 @@ parser.add_argument('--stl_resize', default = 96, type = int)
 parser.add_argument('--masking_method', default = "global", choices = ["global", "stochastic", "cyclical", "auto", "combined"])
 parser.add_argument("--base_fractions", type=float, nargs=2, default=[0.1, 0.3], help="Two base fractions for cyclic PCA masking shift per view")
 parser.add_argument("--patch_size", default = 8, type = int)
+
+parser.add_argument("--warmup_epochs", default = 10, type = int)
 
 #ViT parameters
 parser.add_argument('--vit_patch_size', type=int, default=8, help='ViT patch size (e.g., 4 or 8)') # try it
@@ -188,8 +191,13 @@ def main():
     optimizer = torch.optim.Adam(model.parameters(), args.lr, weight_decay=args.weight_decay)
     #optimizer = torch.optim.AdamW(model.parameters(), args.lr, weight_decay=args.weight_decay)
 
-    scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=len(train_loader), eta_min=0,
-                                                           last_epoch=-1)
+    #scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=len(train_loader), eta_min=0, last_epoch=-1)
+
+    scheduler = LinearWarmupScheduler(
+        optimizer=optimizer,
+        warmup_epochs=args.warmup_epochs,  # or whatever value you want (you could also make this an arg)
+        total_epochs=args.epochs,
+        target_lr=args.lr)
 
     """def get_warmup_cosine_scheduler(optimizer, warmup_iteration, max_iteration):
         def _warmup_cosine(step):

@@ -103,7 +103,8 @@ def generate_experiment_name(args, prefix="simclr"):
         temp,
         resize,
         batch_size,
-        timestamp
+        timestamp,
+        vit_flag
     ]
 
     # Filter out empty strings (e.g., when double or vit is not active)

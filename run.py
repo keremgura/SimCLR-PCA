@@ -7,7 +7,7 @@ from torch.utils.data import random_split
 from torchvision import models
 from data_aug.contrastive_learning_dataset import ContrastiveLearningDataset
 from data_aug.view_generator import ContrastiveLearningViewGenerator, PCAAugmentorWrapper, PCAPlusTransformWrapper
-from models.resnet_simclr import ResNetSimCLR, PCATransformerSimCLR, SimCLRViTModel
+from models.resnet_simclr import ResNetSimCLR, PCATransformerSimCLR, SimCLRViTModel, ViTSimCLR
 from simclr import SimCLR
 from PCAAugmentorSimCLR import PCAAugmentor
 import matplotlib.pyplot as plt
@@ -93,9 +93,9 @@ parser.add_argument("--patch_size", default = 8, type = int)
 
 #ViT parameters
 parser.add_argument('--vit_patch_size', type=int, default=8, help='ViT patch size (e.g., 4 or 8)') # try it
-parser.add_argument('--vit_hidden_size', type=int, default=384, help='ViT hidden size') # only increase makes it worse
-parser.add_argument('--vit_layers', type=int, default=12, help='Number of transformer layers in ViT') # looks problematic to increase above 8, try 6 and 8
-parser.add_argument('--vit_heads', type=int, default=6, help='Number of attention heads in ViT') # remain same, must divide hidden size
+parser.add_argument('--vit_hidden_size', type=int, default=256, help='ViT hidden size') # only increase makes it worse
+parser.add_argument('--vit_layers', type=int, default=8, help='Number of transformer layers in ViT') # looks problematic to increase above 8, try 6 and 8
+parser.add_argument('--vit_heads', type=int, default=4, help='Number of attention heads in ViT') # remain same, must divide hidden size
 parser.add_argument('--vit_intermediate_size', type=int, default=None, help='Optional intermediate size (defaults to 4x hidden size if None)')
 parser.add_argument('--vit_pooling', type=str, choices=['cls', 'mean'], default='mean', help='Pooling strategy: CLS token or mean of patch tokens') # try both
 
@@ -175,11 +175,13 @@ def main():
 
     
     if args.vit:
-        model = SimCLRViTModel(vit_model_name="vit_tiny_patch16_224", image_size=resize, patch_size=args.vit_patch_size, hidden_size = args.vit_hidden_size, layers= args.vit_layers,
+        """model = SimCLRViTModel(vit_model_name="vit_tiny_patch16_224", image_size=resize, patch_size=args.vit_patch_size, hidden_size = args.vit_hidden_size, layers= args.vit_layers,
             heads=args.vit_heads,
             intermediate_size=args.vit_intermediate_size or args.vit_hidden_size * 4,
             simclr_embed_dim=args.out_dim,
-            freeze_patch_embed=True)
+            freeze_patch_embed=True)"""
+
+        model = ViTSimCLR(args)
     else:
         model = ResNetSimCLR(base_model=args.arch, out_dim=args.out_dim, dropout = args.dropout)
 

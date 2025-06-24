@@ -65,20 +65,27 @@ class ViTSimCLR(nn.Module):
         self.pooling = args.vit_pooling  # 'cls' or 'mean'
 
         self.projector = nn.Sequential(
-            nn.Linear(config.hidden_size, 512),
+            nn.Linear(2 * config.hidden_size, 512), # 2 for concatenated cls and mean tokens
             nn.GELU(),
             nn.Linear(512, projection_dim),
             nn.LayerNorm(projection_dim)
         )
 
     def forward(self, x):
-        out = self.vit(pixel_values=x)
+        """out = self.vit(pixel_values=x)
         if self.pooling == "cls":
             features = out.last_hidden_state[:, 0]  # CLS token
         else:
             features = out.last_hidden_state[:, 1:].mean(dim=1)  # Mean of patch tokens
             
-        return self.projector(features)
+        return self.projector(features)"""
+
+        out = self.vit(pixel_values=x)
+        cls = out.last_hidden_state[:, 0]            # CLS token
+        mean = out.last_hidden_state[:, 1:].mean(dim=1)  # Mean pooling (exclude CLS)
+
+        combined = torch.cat([cls, mean], dim=1)     # Concatenate CLS and mean
+        return self.projector(combined)
 
 class ResidualBlock(nn.Module):
     def __init__(self, dim, dropout=0.1):

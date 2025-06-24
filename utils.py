@@ -147,14 +147,31 @@ def setup_pca(args, dataset):
         pca_matrix = torch.tensor(np.load(pca_matrix_path), dtype=torch.float32, device=args.device)
         eigenvalues = torch.tensor(np.load(eigenvalues_path), dtype=torch.float32, device=args.device)
 
+   
+
     eigenvalues = eigenvalues.cpu()
     pca_matrix = pca_matrix.cpu()
+
+    # Compute global mean and std for normalization before PCA
+    all_images = []
+    for img, _ in dataset.get_dataset(args.dataset_name, n_views=1, augmentations=False):
+        if isinstance(img, (list, tuple)):
+            img = img[0]
+        if not isinstance(img, torch.Tensor):
+            img = transforms.ToTensor()(img)
+        all_images.append(img.view(-1))
+    all_images = torch.stack(all_images)
+    mean = all_images.mean(dim=0)
+    std = all_images.std(dim=0)
+
+    
 
 
     pca_augmentor = PCAAugmentor(pca_matrix.T, pca_ratio=args.pca_ratio, 
                                 device=args.device, drop_ratio = args.drop_pc_ratio, shuffle = args.shuffle, base_fractions = args.base_fractions,
                                 drop_strategy = args.drop_strategy, double = args.double, 
-                                interpolate= args.interpolate, pad_strategy = args.pad_strategy)
+                                interpolate= args.interpolate, pad_strategy = args.pad_strategy,
+                                mean = mean, std = std)
 
     return pca_augmentor, eigenvalues
 

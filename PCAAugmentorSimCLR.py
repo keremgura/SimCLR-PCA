@@ -4,7 +4,8 @@ import torchvision.transforms as transforms
 import torch.nn.functional as F
 
 class PCAAugmentor:
-    def __init__(self, masking_fn_, pca_ratio, shuffle, base_fractions, global_min = None, global_max = None, device="cpu", img_size=32, normalize = True, drop_ratio = 0, drop_strategy = "random", double = False, interpolate = False, pad_strategy = "pad"):
+    def __init__(self, masking_fn_, pca_ratio, shuffle, base_fractions, global_min = None, global_max = None, device="cpu", img_size=32, normalize = True,
+        drop_ratio = 0, drop_strategy = "random", double = False, interpolate = False, pad_strategy = "pad", mean = None, std = None):
         """
         Initializes the PCA-based augmentor.
         
@@ -28,6 +29,9 @@ class PCAAugmentor:
         self.double = double
         self.interpolate = interpolate
         self.pad_strategy = pad_strategy
+
+        self.mean = torch.tensor(mean, dtype=torch.float32, device=device) if mean is not None else None
+        self.std = torch.tensor(std, dtype=torch.float32, device=device) if std is not None else None
         
 
         self.to_tensor = transforms.ToTensor()
@@ -211,6 +215,9 @@ class PCAAugmentor:
         img = img.to(self.device)  # Move image to device
         img_flat = img.view(1, -1)  # Flatten image
 
+        if self.mean is not None and self.std is not None:
+            img_flat = (img_flat - self.mean) / (self.std + 1e-6)
+
         pc_mask, pc_mask_input = self.compute_pc_mask(eigenvalues)
 
         D = self.masking_fn_.shape[1]
@@ -315,6 +322,9 @@ class PCAAugmentor:
         B, C, H, W = imgs.shape
         imgs = imgs.to(self.device)
         img_flat = imgs.view(B, -1)
+
+        if self.mean is not None and self.std is not None:
+            img_flat = (img_flat - self.mean) / (self.std + 1e-6)
 
         # For each sample in batch, compute pc masks
         pc_masks = [self.compute_pc_mask(eigenvalues[i]) for i in range(B)]

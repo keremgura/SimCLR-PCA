@@ -164,8 +164,8 @@ def setup_pca(args, dataset):
             img = transforms.ToTensor()(img)
         all_images.append(img.view(-1))
     all_images = torch.stack(all_images)
-    mean = all_images.mean(dim=0)
-    std = all_images.std(dim=0)
+    mean = all_images.mean(dim=0).to(args.device)
+    std = all_images.std(dim=0).to(args.device)
 
     
 
@@ -283,7 +283,9 @@ def visualize_views(train_dataset, original_dataset, args):
 
     for i in range(15):
         img_views, label = train_dataset[i]
-        img1, img2 = img_views[0].cpu(), img_views[1].cpu()
+        """img1, img2 = img_views[0].cpu(), img_views[1].cpu()"""
+
+        img1, img2 = img_views[0], img_views[1]
         # Reshape flattened images if necessary (e.g., for flattened image-space transformer)
         if img1.ndim == 1:
             img1 = img1.view(3, 32, 32)

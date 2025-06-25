@@ -161,7 +161,7 @@ def main():
         train = False)
 
     # Visualize a few samples for sanity checking
-    visualize_views(train_dataset, visualization_base_dataset, args)
+    #visualize_views(train_dataset, visualization_base_dataset, args)
 
     
 

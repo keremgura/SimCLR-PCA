@@ -214,8 +214,12 @@ class PCAAugmentor:
             return P_padded
 
         if not isinstance(img, torch.Tensor):
-            img = self.to_tensor(img).cpu()
+            img = self.to_tensor(img)
         img = img.to(self.device)  # Move image to device
+
+        
+
+
         img_flat = img.view(1, -1)  # Flatten image
 
         if self.mean is not None and self.std is not None:

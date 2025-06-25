@@ -45,6 +45,7 @@ class PCAAugmentorWrapper:
                 img1, img2 = img1.squeeze(0), img2.squeeze(0)
             return [img1, img2]
 
+        
         if method == "global":
             img1, img2 = self.pca_augmentor.extract_views(img, self.eigenvalues)
         elif method == "stochastic":

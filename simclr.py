@@ -136,8 +136,10 @@ class SimCLR(object):
                 total_top1 += top1[0].item() * batch_size
                 total_samples += batch_size
 
-                #print(f"[Batch Time] Load: {load_end - load_start:.3f}s, Forward: {forward_end - forward_start:.3f}s, Backward: {backward_end - backward_start:.3f}s")
-                if n_iter % self.args.log_every_n_steps == 0:
+                # Dynamically adjust logging interval: start frequent, reduce over time
+                log_interval = max(10, self.args.log_every_n_steps * (1 + epoch_counter // 5))
+                if n_iter % log_interval == 0:
+                #if n_iter % self.args.log_every_n_steps == 0:
                     #top1, top5 = accuracy(logits, labels, topk=(1, 5))
                     self.writer.add_scalar('loss', loss, global_step=n_iter)
                     self.writer.add_scalar('acc/top1', top1[0], global_step=n_iter)

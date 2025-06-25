@@ -268,10 +268,10 @@ def prepare_dataloaders(args, dataset, pca_augmentor, eigenvalues):
             )
 
     train_loader = DataLoader(train_dataset, batch_size=args.batch_size, shuffle=True,
-                            num_workers=args.workers, drop_last=True, pin_memory = True)
+                            num_workers=args.workers, drop_last=True, pin_memory = False)
 
     val_loader = DataLoader(val_dataset, batch_size=args.batch_size, shuffle=False,
-                            num_workers=args.workers, drop_last=True, pin_memory = True)
+                            num_workers=args.workers, drop_last=True, pin_memory = False)
 
     return train_loader, val_loader, train_dataset
 

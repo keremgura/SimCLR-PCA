@@ -102,7 +102,8 @@ parser.add_argument('--vit_heads', type=int, default=4, help='Number of attentio
 parser.add_argument('--vit_intermediate_size', type=int, default=None, help='Optional intermediate size (defaults to 4x hidden size if None)')
 parser.add_argument('--vit_pooling', type=str, choices=['cls', 'mean'], default='mean', help='Pooling strategy: CLS token or mean of patch tokens') # try both
 
-
+import torch.multiprocessing as mp
+mp.set_start_method('spawn', force=True)
 
 def main():
     args = parser.parse_args()

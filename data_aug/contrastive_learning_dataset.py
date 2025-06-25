@@ -5,6 +5,9 @@ from torchvision import transforms, datasets
 from data_aug.view_generator import ContrastiveLearningViewGenerator, PCAAugmentorWrapper, PCAPlusTransformWrapper
 from exceptions.exceptions import InvalidDatasetSelection
 
+class IdentityTransform:
+    def __call__(self, x):
+        return x
 
 class ContrastiveLearningDataset:
     def __init__(self, root_folder, resize, masking_method, patch_size):
@@ -52,7 +55,7 @@ class ContrastiveLearningDataset:
             resize_transform = transforms.Resize((self.resize, self.resize))
             
         else:
-            resize_transform = transforms.Lambda(lambda x: x)  # no-op
+            resize_transform = IdentityTransform()  # no-op
 
        
 

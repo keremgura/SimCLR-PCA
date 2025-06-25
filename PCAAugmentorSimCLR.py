@@ -30,8 +30,11 @@ class PCAAugmentor:
         self.interpolate = interpolate
         self.pad_strategy = pad_strategy
 
-        self.mean = torch.tensor(mean, dtype=torch.float32, device=device) if mean is not None else None
-        self.std = torch.tensor(std, dtype=torch.float32, device=device) if std is not None else None
+        
+        self.mean = mean.clone().detach().to(dtype=torch.float32, device=device)
+        self.std = std.clone().detach().to(dtype=torch.float32, device=device)
+        """self.mean = torch.tensor(mean, dtype=torch.float32, device=device) if mean is not None else None
+        self.std = torch.tensor(std, dtype=torch.float32, device=device) if std is not None else None"""
         
 
         self.to_tensor = transforms.ToTensor()
@@ -262,7 +265,8 @@ class PCAAugmentor:
             
 
         
-        return img_reconstructed.view(img.shape).cpu(), target.view(img.shape).cpu()
+        #return img_reconstructed.view(img.shape).cpu(), target.view(img.shape).cpu()
+        return img_reconstructed.view(img.shape), target.view(img.shape) # no switching to cpu
 
 
     def extract_views_batch(self, imgs: torch.Tensor, eigenvalues: torch.Tensor):
@@ -507,7 +511,6 @@ class PCAAugmentor:
                 if denom < 1e-4:
                     denom = 1e-4
                 recon_img /= denom
-
             return recon_img.cpu()
 
         view1 = apply_patchwise_cyclic(base_fraction=self.base_fractions[0])

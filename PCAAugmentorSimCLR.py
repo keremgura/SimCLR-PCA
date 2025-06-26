@@ -1,5 +1,6 @@
 import numpy as np
 import torch
+import random
 import torchvision.transforms as transforms
 import torch.nn.functional as F
 
@@ -44,22 +45,33 @@ class PCAAugmentor:
         m = self.pca_ratio
         d = self.drop_ratio if drop_ratio is None else drop_ratio
 
-        eigenvalues_np = eigenvalues.cpu().numpy()
-        total_variance = np.sum(eigenvalues_np)
+        """eigenvalues_np = eigenvalues.cpu().numpy()
+        total_variance = np.sum(eigenvalues_np)"""
+
+        eigenvalues = eigenvalues.to(self.device)
+        total_variance = eigenvalues.sum()
 
         def sample_view_mask(strategy, drop_ratio, retain_ratio):
-            sorted_indices = np.argsort(eigenvalues_np)[::-1]
-            sorted_eigvals = eigenvalues_np[sorted_indices]
-            cumsum = np.cumsum(sorted_eigvals)
+            #sorted_indices = np.argsort(eigenvalues_np)[::-1]
+            sorted_indices = torch.argsort(eigenvalues, descending=True)
+            #sorted_eigvals = eigenvalues_np[sorted_indices]
+            #cumsum = np.cumsum(sorted_eigvals)
+            sorted_eigvals = eigenvalues[sorted_indices]
+            cumsum = torch.cumsum(sorted_eigvals, dim=0)
 
             
 
             if strategy == "low":
                 mask = cumsum >= (1 - drop_ratio) * total_variance
-                if not np.any(mask):
+                """if not np.any(mask):
                     drop_threshold = len(sorted_indices)
                 else:
-                    drop_threshold = np.argmax(mask)
+                    drop_threshold = np.argmax(mask)"""
+
+                if not torch.any(mask):
+                    drop_threshold = len(sorted_indices)
+                else:
+                    drop_threshold = torch.argmax(mask)
 
                 retain_indices = sorted_indices[:drop_threshold]
                 if len(retain_indices) == 0 or drop_ratio == 0:
@@ -70,21 +82,33 @@ class PCAAugmentor:
             elif strategy == "middle":
                 drop_lower = (0.5 - drop_ratio / 2) * total_variance
                 drop_upper = (0.5 + drop_ratio / 2) * total_variance
-                start_idx = np.searchsorted(cumsum, drop_lower)
-                end_idx = np.searchsorted(cumsum, drop_upper)
-                retain_indices = np.concatenate([sorted_indices[:start_idx], sorted_indices[end_idx:]])
+                """start_idx = np.searchsorted(cumsum, drop_lower)
+                end_idx = np.searchsorted(cumsum, drop_upper)"""
+                start_idx = torch.searchsorted(cumsum, torch.tensor(drop_lower, device=self.device))
+                end_idx = torch.searchsorted(cumsum, torch.tensor(drop_upper, device=self.device))
+                #retain_indices = np.concatenate([sorted_indices[:start_idx], sorted_indices[end_idx:]])
+                retain_indices = torch.cat([sorted_indices[:start_idx], sorted_indices[end_idx:]])
 
                 if len(retain_indices) == 0 or end_idx <= start_idx:
                     retain_indices = sorted_indices
 
             else:  # "random"
-                index = torch.randperm(len(eigenvalues)).cpu().numpy()
+                """index = torch.randperm(len(eigenvalues)).cpu().numpy()
                 eigvals_shuffled = eigenvalues_np[index]
-                cumsum = np.cumsum(eigvals_shuffled)
+                cumsum = np.cumsum(eigvals_shuffled)"""
 
-                drop_cutoff = np.argmin(np.abs(cumsum - d))
+                index = torch.randperm(len(eigenvalues), device=self.device)
+                eigvals_shuffled = eigenvalues[index]
+                cumsum = torch.cumsum(eigvals_shuffled, dim=0)
+
+                """drop_cutoff = np.argmin(np.abs(cumsum - d))
                 cumsum_after_drop = np.cumsum(eigvals_shuffled[drop_cutoff:])
-                retain_thresh = np.argmin(np.abs(cumsum_after_drop - m * (1 - d)))
+                retain_thresh = np.argmin(np.abs(cumsum_after_drop - m * (1 - d)))"""
+
+                drop_cutoff = torch.argmin(torch.abs(cumsum - d))
+                #cumsum_after_drop = torch.cumsum(eigvals_shuffled[drop_cutoff:])
+                cumsum_after_drop = torch.cumsum(eigvals_shuffled[drop_cutoff:], dim=0)
+                retain_thresh = torch.argmin(torch.abs(cumsum_after_drop - m * (1 - d)))
 
                 selected = index[drop_cutoff:drop_cutoff + retain_thresh]
                 #retain_indices = np.arange(len(eigenvalues_np))
@@ -92,7 +116,7 @@ class PCAAugmentor:
             
 
             if strategy != "random":
-                if self.shuffle:
+                """if self.shuffle:
                     np.random.shuffle(retain_indices)
                 retained_eigvals = eigenvalues_np[retain_indices]
                 cumsum_ret = np.cumsum(retained_eigvals)
@@ -102,26 +126,41 @@ class PCAAugmentor:
                     selected = retain_indices
                 else:
                     threshold = np.argmin(diffs)
-                    selected = retain_indices if threshold == 0 else retain_indices[:threshold]
+                    selected = retain_indices if threshold == 0 else retain_indices[:threshold]"""
 
-            return torch.tensor(selected.copy(), dtype=torch.long, device=self.device)
+                retain_indices = retain_indices[torch.randperm(len(retain_indices))]
+                retained_eigvals = eigenvalues[retain_indices]
+                cumsum_ret = torch.cumsum(retained_eigvals, dim=0)
+                diffs = torch.abs(cumsum_ret - retain_ratio * (1 - drop_ratio))
+                threshold = torch.argmin(diffs)
+
+            #return torch.tensor(selected.copy(), dtype=torch.long, device=self.device)
+            return selected.clone().detach().long().to(self.device)
             #return torch.tensor(selected.copy(), dtype=torch.long)
 
 
         # Apply slight randomization to drop and retain ratios for both input and target
         drop_randomize = 0.1 if d > 0 else 0
         mask_randomize = 0.1
-        drop_input = d + np.random.uniform(-drop_randomize, drop_randomize)
+        """drop_input = d + np.random.uniform(-drop_randomize, drop_randomize)
         retain_input = m + np.random.uniform(-mask_randomize, mask_randomize)
         drop_target = d + np.random.uniform(-drop_randomize, drop_randomize)
-        retain_target = m + np.random.uniform(-mask_randomize, mask_randomize)
+        retain_target = m + np.random.uniform(-mask_randomize, mask_randomize)"""
+
+        drop_input = d + (torch.rand(1, device=self.device).item() * 2 * drop_randomize - drop_randomize)
+        retain_input = m + (torch.rand(1, device=self.device).item() * 2 * mask_randomize - mask_randomize)
+        drop_target = d + (torch.rand(1, device=self.device).item() * 2 * drop_randomize - drop_randomize)
+        retain_target = m + (torch.rand(1, device=self.device).item() * 2 * mask_randomize - mask_randomize)
 
         # Weighted randomization of drop_strategy per call if requested
         if self.drop_strategy == "arbitrary":
             strategy_pool = ["random", "low", "middle"]
             strategy_weights = [0.7, 0.15, 0.15]
-            selected_strategy_input = np.random.choice(strategy_pool, p=strategy_weights)
-            selected_strategy_target = np.random.choice(strategy_pool, p=strategy_weights)
+            """selected_strategy_input = np.random.choice(strategy_pool, p=strategy_weights)
+            selected_strategy_target = np.random.choice(strategy_pool, p=strategy_weights)"""
+
+            selected_strategy_input = random.choices(strategy_pool, weights=strategy_weights, k=1)[0]
+            selected_strategy_target = random.choices(strategy_pool, weights=strategy_weights, k=1)[0]
         else:
             selected_strategy_input = selected_strategy_target = self.drop_strategy
 

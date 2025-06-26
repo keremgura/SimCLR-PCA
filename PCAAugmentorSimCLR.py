@@ -30,6 +30,7 @@ class PCAAugmentor:
         self.double = double
         self.interpolate = interpolate
         self.pad_strategy = pad_strategy
+        self.precomputed_masks = None
 
         
         self.mean = mean.clone().detach().to(dtype=torch.float32, device=device)
@@ -203,9 +204,20 @@ class PCAAugmentor:
 
         return pc_mask_input, pc_mask_target
 
-    
+    def precompute_masks(self, eigenvalues_tensor: torch.Tensor):
+        """
+        Precomputes and stores PCA masks for all samples in the dataset.
+        Should be called once per epoch.
+        """
+        self.precomputed_masks = []
+        for i in range(eigenvalues_tensor.size(0)):
+            eigval_sample = eigenvalues_tensor[i]
+            if eigval_sample.dim() == 0:
+                eigval_sample = eigval_sample.unsqueeze(0)
+            pc_mask_input, pc_mask_target = self.compute_pc_mask(eigval_sample)
+            self.precomputed_masks.append((pc_mask_input, pc_mask_target))
 
-    def extract_views(self, img, eigenvalues):
+    def extract_views(self, img, eigenvalues, index = None):
         
         def pad_matrix(P_full, keep_indices, strategy="pad", target_dim=None, std=0.01):
             device = P_full.device
@@ -264,7 +276,10 @@ class PCAAugmentor:
         if self.mean is not None and self.std is not None:
             img_flat = (img_flat - self.mean) / (self.std + 1e-6)
 
-        pc_mask, pc_mask_input = self.compute_pc_mask(eigenvalues)
+        if self.precomputed_masks is not None and index is not None:
+            pc_mask_input, pc_mask = self.precomputed_masks[index]
+        else:
+            pc_mask, pc_mask_input = self.compute_pc_mask(eigenvalues)
 
         D = self.masking_fn_.shape[1]
         

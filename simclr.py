@@ -16,11 +16,14 @@ torch.manual_seed(0)
 
 class SimCLR(object):
 
-    def __init__(self, *args, **kwargs):
+    def __init__(self, *args,pca_augmentor = None, eigenvalues = None, **kwargs):
         self.args = kwargs['args']
         self.model = kwargs['model'].to(self.args.device)
         self.optimizer = kwargs['optimizer']
         self.scheduler = kwargs['scheduler']
+
+        self.pca_augmentor = pca_augmentor
+        self.eigenvalues = eigenvalues
 
         self.classifier, self.classifier_optimizer, self.classifier_criterion = get_linear_classifier(
             out_dim=self.args.out_dim, device=self.args.device)
@@ -86,24 +89,19 @@ class SimCLR(object):
         
         for epoch_counter in range(self.args.epochs):
             self.model.train()
+            self.pca_augmentor.precompute_masks(self.eigenvalues)
             epoch_start_time = time.time()
             total_loss = 0.0
             total_top1 = 0.0
             total_samples = 0
             for images, _ in tqdm(train_loader):
+            #for images, _, indices in tqdm(train_loader):
                 start_time = time.time()
                 load_start = time.time()
 
-                """images = images.to(self.args.device, non_blocking=True)
-                # Retrieve corresponding eigenvalues for the batch (adjust indexing as needed)
-                # e.g., if using DistributedSampler, also track global indices
-                eigenvalues = self.eigenvalues_tensor[batch_indices].to(self.args.device)
 
-                # Apply batched PCA masking to get two views
-                view1, view2 = self.pca_augmentor.extract_views(images, eigenvalues)
-
-                # Concatenate both views for contrastive loss
-                images = torch.cat([view1, view2], dim=0) """
+                """view1, view2 = self.pca_augmentor.extract_views(images, self.eigenvalues, index=indices)
+                images = torch.cat([view1, view2], dim=0)"""
                 
                 images = torch.cat(images, dim=0)
                 start = time.time()

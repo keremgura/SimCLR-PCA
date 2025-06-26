@@ -219,7 +219,7 @@ def main():
 
     #  It’s a no-op if the 'gpu_index' argument is a negative integer or None.
     with torch.cuda.device(args.gpu_index):
-        simclr = SimCLR(model=model, optimizer=optimizer, scheduler=scheduler, args=args)
+        simclr = SimCLR(model=model, optimizer=optimizer, scheduler=scheduler, args=args, pca_augmentor = pca_augmentor, eigenvalues = eigenvalues)
         simclr.train(train_loader, val_loader)
         simclr.linear_probe_full(probe_train_dataset, probe_test_dataset)
 

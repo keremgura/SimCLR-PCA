@@ -164,7 +164,7 @@ def setup_pca(args, dataset):
             img = transforms.ToTensor()(img)
         all_images.append(img.view(-1))
     all_images = torch.stack(all_images)
-    mean = all_images.mean(dim=0).to(args.device)
+    mean = all_images.mean(dim=0).to(args.device) # move mean, std to gpu
     std = all_images.std(dim=0).to(args.device)
 
     
@@ -177,6 +177,16 @@ def setup_pca(args, dataset):
                                 mean = mean, std = std)
 
     return pca_augmentor, eigenvalues
+class DatasetWithIndex(torch.utils.data.Dataset):
+    def __init__(self, dataset):
+        self.dataset = dataset
+
+    def __getitem__(self, index):
+        data, label = self.dataset[index]
+        return data, label, index
+
+    def __len__(self):
+        return len(self.dataset)
 
 def prepare_dataloaders(args, dataset, pca_augmentor, eigenvalues):
     image_size = args.stl_resize if args.dataset_name == 'stl10' else 32
@@ -267,6 +277,7 @@ def prepare_dataloaders(args, dataset, pca_augmentor, eigenvalues):
                 n_views=args.n_views
             )
 
+    #train_dataset = DatasetWithIndex(train_dataset)
     train_loader = DataLoader(train_dataset, batch_size=args.batch_size, shuffle=True,
                             num_workers=args.workers, drop_last=True, pin_memory = False)
 

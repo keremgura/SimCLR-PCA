@@ -33,7 +33,7 @@ model_names = sorted(name for name in models.__dict__
 parser = argparse.ArgumentParser(description='PyTorch SimCLR')
 parser.add_argument('-data', metavar='DIR', default='./data',
                     help='path to dataset')
-parser.add_argument('--dataset-name', default='stl10',
+parser.add_argument('--dataset-name', default='cifar10',
                     help='dataset name', choices=['stl10', 'cifar10'])
 parser.add_argument('-a', '--arch', metavar='ARCH', default='resnet18',
                     choices=model_names,
@@ -161,7 +161,7 @@ def main():
         train = False)
 
     # Visualize a few samples for sanity checking
-    #visualize_views(train_dataset, visualization_base_dataset, args)
+    visualize_views(train_dataset, visualization_base_dataset, args)
 
     
 
@@ -200,22 +200,6 @@ def main():
         total_epochs=args.epochs,
         target_lr=args.lr)
 
-    """def get_warmup_cosine_scheduler(optimizer, warmup_iteration, max_iteration):
-        def _warmup_cosine(step):
-            if step < warmup_iteration:
-                lr_ratio = step * 1.0 / warmup_iteration
-            else:
-                where = (step - warmup_iteration) * 1.0 / (max_iteration - warmup_iteration)
-                lr_ratio = 0.5 * (1 + math.cos(math.pi * where))
-
-            return lr_ratio
-
-        return torch.optim.lr_scheduler.LambdaLR(optimizer, _warmup_cosine)
-    iters_per_epoch = len(train_dataset) / batch_size
-    lr_scheduler = get_warmup_cosine_scheduler(
-        optimizer,
-        warmup_iteration=int(iters_per_epoch * cfg.warmup_epochs),
-        max_iteration=int(iters_per_epoch * num_epochs),)"""
 
     #  It’s a no-op if the 'gpu_index' argument is a negative integer or None.
     with torch.cuda.device(args.gpu_index):

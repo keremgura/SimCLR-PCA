@@ -100,7 +100,9 @@ parser.add_argument('--vit_hidden_size', type=int, default=256, help='ViT hidden
 parser.add_argument('--vit_layers', type=int, default=8, help='Number of transformer layers in ViT') # looks problematic to increase above 8, try 6 and 8
 parser.add_argument('--vit_heads', type=int, default=4, help='Number of attention heads in ViT') # remain same, must divide hidden size
 parser.add_argument('--vit_intermediate_size', type=int, default=None, help='Optional intermediate size (defaults to 4x hidden size if None)')
-parser.add_argument('--vit_pooling', type=str, choices=['cls', 'mean'], default='mean', help='Pooling strategy: CLS token or mean of patch tokens') # try both
+parser.add_argument('--vit_pooling', type=str, choices=['cls', 'mean', 'both'], default='mean', help='Pooling strategy: CLS token or mean of patch tokens') # try both
+parser.add_argument('--proj_hidden_dim', type=int, default=512, help='ViT projector hidden dim')
+parser.add_argument('--proj_num_layers', type=int, default=2)
 
 import torch.multiprocessing as mp
 mp.set_start_method('spawn', force=True)

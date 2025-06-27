@@ -44,49 +44,6 @@ class ResNetSimCLR(nn.Module):
         h = self.backbone(x)
         return F.normalize(h, dim=1)
 
-class ViTSimCLR(nn.Module):
-    def __init__(self, args, image_size=32, projection_dim=128):
-        super().__init__()
-
-        hidden_size = args.vit_hidden_size
-        intermediate_size = args.vit_intermediate_size or hidden_size * 4
-
-        config = ViTConfig(
-            image_size=image_size,
-            patch_size=args.vit_patch_size,
-            hidden_size=hidden_size,
-            num_hidden_layers=args.vit_layers,
-            num_attention_heads=args.vit_heads,
-            intermediate_size=intermediate_size,
-            num_channels=3,
-        )
-
-        self.vit = ViTModel(config)
-        self.pooling = args.vit_pooling  # 'cls' or 'mean'
-
-        self.projector = nn.Sequential(
-            nn.Linear(2 * config.hidden_size, 512), # 2 for concatenated cls and mean tokens
-            nn.GELU(),
-            nn.Linear(512, projection_dim),
-            nn.LayerNorm(projection_dim)
-        )
-
-    def forward(self, x):
-        """out = self.vit(pixel_values=x)
-        if self.pooling == "cls":
-            features = out.last_hidden_state[:, 0]  # CLS token
-        else:
-            features = out.last_hidden_state[:, 1:].mean(dim=1)  # Mean of patch tokens
-            
-        return self.projector(features)"""
-
-        out = self.vit(pixel_values=x)
-        cls = out.last_hidden_state[:, 0]            # CLS token
-        mean = out.last_hidden_state[:, 1:].mean(dim=1)  # Mean pooling (exclude CLS)
-
-        combined = torch.cat([cls, mean], dim=1)     # Concatenate CLS and mean
-        return self.projector(combined)
-
 class ResidualBlock(nn.Module):
     def __init__(self, dim, dropout=0.1):
         super().__init__()
@@ -101,6 +58,90 @@ class ResidualBlock(nn.Module):
 
     def forward(self, x):
         return x + self.block(x)
+
+class ViTSimCLR(nn.Module):
+    def __init__(self, args, image_size=32):
+        super().__init__()
+
+        hidden_size = args.vit_hidden_size
+        intermediate_size = args.vit_intermediate_size or hidden_size * 4
+        projection_dim = args.out_dim
+        hidden_dim = args.proj_hidden_dim
+        num_layers = args.proj_num_layers
+
+        config = ViTConfig(
+            image_size=image_size,
+            patch_size=args.vit_patch_size,
+            hidden_size=hidden_size,
+            num_hidden_layers=args.vit_layers,
+            num_attention_heads=args.vit_heads,
+            intermediate_size=intermediate_size,
+            num_channels=3,)
+
+        self.vit = ViTModel(config)
+        self.pooling = args.vit_pooling  # 'cls' or 'mean'
+
+        """self.projector = nn.Sequential(
+            nn.Linear(2 * config.hidden_size, hidden_dim), # 2 for concatenated cls and mean tokens
+            nn.GELU(),
+            nn.Dropout(p = args.dropout),
+            #ResidualHeadBlock(hidden_dim, args.dropout),
+            nn.Linear(hiden_dim, projection_dim),
+            nn.LayerNorm(projection_dim))"""
+
+        # determine input dimension based on pooling mode
+        if self.pooling == 'both':
+            mlp_input_dim = 2 * hidden_size
+        else:
+            mlp_input_dim = hidden_size
+
+        # build projection MLP dynamically
+        mlp_layers = []
+        # first layer
+        mlp_layers.append(nn.Linear(mlp_input_dim, hidden_dim))
+        mlp_layers.append(nn.GELU())
+        mlp_layers.append(nn.Dropout(p=args.dropout))
+        # middle layers (if any)
+        for _ in range(num_layers - 2):
+            mlp_layers.append(nn.Linear(hidden_dim, hidden_dim))
+            mlp_layers.append(nn.GELU())
+            mlp_layers.append(nn.Dropout(p=args.dropout))
+        # final layer
+        mlp_layers.append(nn.Linear(hidden_dim, projection_dim))
+        mlp_layers.append(nn.LayerNorm(projection_dim))
+
+        self.projector = nn.Sequential(*mlp_layers)
+
+
+    def forward(self, x):
+        out = self.vit(pixel_values=x)
+        """cls = out.last_hidden_state[:, 0]            # CLS token
+        mean = out.last_hidden_state[:, 1:].mean(dim=1)  # Mean pooling (exclude CLS)
+        combined = torch.cat([cls, mean], dim=1)     # Concatenate CLS and mean
+        z = self.projector(combined)
+        """
+        hidden = out.last_hidden_state
+        if self.pooling == 'cls':
+            features = hidden[:, 0]
+        elif self.pooling == 'mean':
+            features = hidden[:, 1:].mean(dim=1)
+        elif self.pooling == 'both':
+            cls   = hidden[:, 0]
+            mean  = hidden[:, 1:].mean(dim=1)
+            features = torch.cat([cls, mean], dim=1)
+        else:
+            raise ValueError(f"Unknown pooling mode: {self.pooling}")
+        z = self.projector(features)
+        
+        
+        return F.normalize(z, dim=1)
+        #return z
+
+        
+
+        
+
+
 
 class PCASimCLR(nn.Module):
     def __init__(self, input_dim, out_dim, hidden_dim=512, dropout=0.1):

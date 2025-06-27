@@ -327,7 +327,7 @@ class PCAAugmentor:
         return img_reconstructed.view(img.shape), target.view(img.shape) # no switching to cpu
 
 
-    def extract_views_batch(self, imgs: torch.Tensor, eigenvalues: torch.Tensor):
+    """def extract_views_batch(self, imgs: torch.Tensor, eigenvalues: torch.Tensor):
         """
         Batched PCA-based augmentation. Operates on GPU.
         
@@ -412,7 +412,7 @@ class PCAAugmentor:
             target = (target - target.min(dim=1, keepdim=True)[0]) / \
                     (target.max(dim=1, keepdim=True)[0] - target.min(dim=1, keepdim=True)[0] + 1e-4)
 
-        return img_reconstructed.view(B, C, H, W).cpu(), target.view(B, C, H, W).cpu()
+        return img_reconstructed.view(B, C, H, W).cpu(), target.view(B, C, H, W).cpu()"""
 
 
     
@@ -467,14 +467,25 @@ class PCAAugmentor:
                     # For now, assume PCA basis rows are consistent with flattened patch layout
                     # (More robust row slicing logic can be added later)
                     #P_patch = P[:patch_flat.shape[0], :]
+                    sparse_flat = torch.zeros_like(img_flat)
                     row_ids = self.get_patch_row_indices(i, j, patch_size, H)
-                    P_patch = P[row_ids, :] 
+
+                    """P_patch = P[row_ids, :] 
                     P_subset = P_patch[:, retained_indices]
                     
                     projected = patch_flat @ P_subset
                     reconstructed = projected @ P_subset.T
 
-                    patch_recon = reconstructed.view(C, patch_size, patch_size)
+                    patch_recon = reconstructed.view(C, patch_size, patch_size)"""
+
+                    sparse_flat[row_ids] = patch_flat
+                    P_subset = P[:, retained_indices]
+                    projected = sparse_flat @ P_subset
+                    reconstructed = projected @ P_subset.T
+                    
+                    # Extract the reconstructed patch region from the reconstructed full image
+                    patch_recon = reconstructed[row_ids].view(C, patch_size, patch_size)
+
                     patches.append(patch_recon)
 
             # stitch patches back
@@ -491,7 +502,8 @@ class PCAAugmentor:
                 denom = 1e-4
             recon_img /= denom
 
-            return recon_img.cpu()
+            #return recon_img.cpu()
+            return recon_img
 
         view1 = apply_patchwise_masking()
         view2 = apply_patchwise_masking()
@@ -516,6 +528,8 @@ class PCAAugmentor:
         sorted_eigvals = eigvals[sorted_indices]
         cumsum = np.cumsum(sorted_eigvals)
         total_variance = cumsum[-1]
+
+        img_flat = img.view(-1)
 
         def get_indices_for_patch(i, j, base_fraction, window_fraction):
             patch_index = (i // patch_size) * (W // patch_size) + (j // patch_size)
@@ -548,12 +562,23 @@ class PCAAugmentor:
                     patch_flat = patch.contiguous().view(-1)
                     indices = get_indices_for_patch(i, j, base_fraction, variance_ratio)
                     row_ids = self.get_patch_row_indices(i, j, patch_size, H)
-                    P_patch = P[row_ids, :] 
+
+                    # Instead of slicing P_patch = P[row_ids, :] and P_subset = P_patch[:, indices],
+                    # create a sparse full-image vector with only the patch region retaining values
+                    sparse_flat = torch.zeros_like(img_flat)
+                    sparse_flat[row_ids] = patch_flat
+                    P_subset = P[:, indices]
+                    projected = sparse_flat @ P_subset
+                    reconstructed = projected @ P_subset.T
+
+                    patch_recon = reconstructed[row_ids].view(C, patch_size, patch_size)
+
+                    """P_patch = P[row_ids, :] 
                     P_subset = P_patch[:, indices]
 
                     projected = patch_flat @ P_subset
                     reconstructed = projected @ P_subset.T
-                    patch_recon = reconstructed.view(C, patch_size, patch_size)
+                    patch_recon = reconstructed.view(C, patch_size, patch_size)"""
                     patches.append(patch_recon)
 
             recon_img = torch.zeros_like(img)
@@ -569,7 +594,8 @@ class PCAAugmentor:
                 if denom < 1e-4:
                     denom = 1e-4
                 recon_img /= denom
-            return recon_img.cpu()
+            #return recon_img.cpu()
+            return recon_img
 
         view1 = apply_patchwise_cyclic(base_fraction=self.base_fractions[0])
         view2 = apply_patchwise_cyclic(base_fraction=self.base_fractions[1])

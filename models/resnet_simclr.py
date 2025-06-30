@@ -89,11 +89,13 @@ class ViTSimCLR(nn.Module):
             nn.Linear(hiden_dim, projection_dim),
             nn.LayerNorm(projection_dim))"""
 
-        # determine input dimension based on pooling mode
+        """# determine input dimension based on pooling mode
         if self.pooling == 'both':
             mlp_input_dim = 2 * hidden_size
         else:
-            mlp_input_dim = hidden_size
+            mlp_input_dim = hidden_size"""
+
+        mlp_input_dim = hidden_size
 
         # build projection MLP dynamically
         mlp_layers = []
@@ -128,7 +130,8 @@ class ViTSimCLR(nn.Module):
         elif self.pooling == 'both':
             cls   = hidden[:, 0]
             mean  = hidden[:, 1:].mean(dim=1)
-            features = torch.cat([cls, mean], dim=1)
+            #features = torch.cat([cls, mean], dim=1)
+            features = (cls + mean) * 0.5  # average of CLS and mean
         else:
             raise ValueError(f"Unknown pooling mode: {self.pooling}")
         z = self.projector(features)

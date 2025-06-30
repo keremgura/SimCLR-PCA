@@ -86,6 +86,7 @@ def generate_experiment_name(args, prefix="simclr"):
 
     batch_size = str(args.batch_size)
     temp = f"temp{args.temperature}"
+    patch_size = str(args.patch_size)
 
     # Assemble parts
     parts = [
@@ -105,6 +106,7 @@ def generate_experiment_name(args, prefix="simclr"):
         temp,
         resize,
         batch_size,
+        patch_size,
         timestamp,
         vit_flag
     ]

@@ -328,7 +328,7 @@ class PCAAugmentor:
 
 
     """def extract_views_batch(self, imgs: torch.Tensor, eigenvalues: torch.Tensor):
-        """
+        
         Batched PCA-based augmentation. Operates on GPU.
         
         Args:
@@ -337,7 +337,7 @@ class PCAAugmentor:
         
         Returns:
             Two views (img1, img2) of shape (B, C, H, W), projected via masked PCA bases.
-        """
+        
         def pad_matrix(P_full, keep_indices, strategy="pad", target_dim=None, std=0.01):
             device = P_full.device
             D = P_full.shape[1]

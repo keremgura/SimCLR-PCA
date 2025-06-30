@@ -86,6 +86,8 @@ def generate_experiment_name(args, prefix="simclr"):
 
     batch_size = str(args.batch_size)
     temp = f"temp{args.temperature}"
+    lr = f"lr{args.lr}"
+    wd = f"wd{args.weight_decay}"
     patch_size = str(args.patch_size)
 
     # Assemble parts
@@ -104,6 +106,8 @@ def generate_experiment_name(args, prefix="simclr"):
         interpolate_flag,
         pad,
         temp,
+        lr,
+        wd,
         resize,
         batch_size,
         patch_size,

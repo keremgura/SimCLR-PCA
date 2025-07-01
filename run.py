@@ -42,7 +42,7 @@ parser.add_argument('-a', '--arch', metavar='ARCH', default='resnet18',
                          ' (default: resnet18)')
 parser.add_argument('-j', '--workers', default=0, type=int, metavar='N', # 12 normally
                     help='number of data loading workers (default: 32)')
-parser.add_argument('--epochs', default=100, type=int, metavar='N',
+parser.add_argument('--epochs', default=200, type=int, metavar='N',
                     help='number of total epochs to run')
 parser.add_argument('-b', '--batch_size', default=256, type=int,
                     metavar='N',
@@ -51,7 +51,7 @@ parser.add_argument('-b', '--batch_size', default=256, type=int,
                          'using Data Parallel or Distributed Data Parallel')
 parser.add_argument('--lr', '--learning-rate', default=0.0003, type=float,
                     metavar='LR', help='initial learning rate', dest='lr')
-parser.add_argument('--wd', '--weight-decay', default=1e-4, type=float,
+parser.add_argument('--wd', '--weight_decay', default=1e-4, type=float,
                     metavar='W', help='weight decay (default: 1e-4)',
                     dest='weight_decay')
 parser.add_argument('--seed', default=None, type=int,

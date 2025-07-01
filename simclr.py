@@ -281,9 +281,17 @@ class SimCLR(object):
         import torch.nn.functional as F
 
         self.model.eval()
+
+        if self.args.vit:
+            out_dim = self.args.vit_hidden_size
+        else:
+            if self.args.arch == "resnet18":
+                out_dim = 512
+            else:
+                out_dim = 2048
         
         classifier, optimizer, criterion = get_linear_classifier(
-            out_dim=512, device=self.args.device)
+            out_dim=out_dim, device=self.args.device)
 
         """# Split dataset: 90% train / 10% test
         probe_size = int(0.8 * len(full_dataset))

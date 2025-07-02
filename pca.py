@@ -25,7 +25,7 @@ print("Library imports successful!")
 """
 Performs PCA on a subset of ImageNet images
 """
-resolution=48
+resize = 32
 name="stl10"
 #data_fn = torchvision.datasets.ImageFolder
 data_fn = torchvision.datasets.STL10
@@ -35,7 +35,7 @@ folder = "./data/stl10"
 if not os.path.exists(os.path.join(folder, "cifar-10-batches-py")):
     raise FileNotFoundError(f"CIFAR-10 dataset not found in {folder}. Ensure it is extracted properly.")
 """
-resize = 32
+
 # apply transformations to loaded images
 transform = transforms.Compose([
     transforms.Resize((resize, resize)),
@@ -46,7 +46,7 @@ num_samples = len(trainset)
 
 
 # Create a DataLoader for the subset
-trainloader = torch.utils.data.DataLoader(trainset, batch_size= num_samples, shuffle=False) # batch size should be subset size?
+trainloader = torch.utils.data.DataLoader(trainset, batch_size= num_samples, shuffle=False)
 data_iter = iter(trainloader)
 images_np, _ = next(data_iter) # image tensors
 

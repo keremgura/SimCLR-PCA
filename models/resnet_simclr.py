@@ -116,12 +116,16 @@ class ViTSimCLR(nn.Module):
 
 
     def forward(self, x):
+        features = self.get_features(x)
+        z = self.projector(features)
+        
+        
+        return F.normalize(z, dim=1)
+        #return z
+
+    def get_features(self, x):
         out = self.vit(pixel_values=x)
-        """cls = out.last_hidden_state[:, 0]            # CLS token
-        mean = out.last_hidden_state[:, 1:].mean(dim=1)  # Mean pooling (exclude CLS)
-        combined = torch.cat([cls, mean], dim=1)     # Concatenate CLS and mean
-        z = self.projector(combined)
-        """
+        
         hidden = out.last_hidden_state
         if self.pooling == 'cls':
             features = hidden[:, 0]
@@ -134,11 +138,9 @@ class ViTSimCLR(nn.Module):
             features = (cls + mean) * 0.5  # average of CLS and mean
         else:
             raise ValueError(f"Unknown pooling mode: {self.pooling}")
-        z = self.projector(features)
-        
-        
-        return F.normalize(z, dim=1)
-        #return z
+
+        return features
+
 
         
 

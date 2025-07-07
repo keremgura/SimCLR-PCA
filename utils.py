@@ -147,8 +147,12 @@ def setup_pca(args, dataset):
         return None, None
 
     if args.dataset_name == "cifar10":
-        pca_matrix = torch.tensor(np.load("/cluster/home/kguera/SimCLR/outputs/pc_matrix_ipca.npy"), dtype=torch.float32, device=args.device)
-        eigenvalues = torch.tensor(np.load("/cluster/home/kguera/SimCLR/outputs/eigenvalues_ratio_ipca.npy"), dtype=torch.float32, device=args.device)
+        pca_matrix = torch.tensor(np.load("/cluster/home/kguera/SimCLR/outputs/imagenet32_cifar10_pc_matrix_flipped.npy"), dtype=torch.float32, device=args.device).T
+        eigenvalues = torch.tensor(np.load("/cluster/home/kguera/SimCLR/outputs/imagenet32_cifar10_eigenvalues_ratio.npy"), dtype=torch.float32, device=args.device)
+
+
+        #pca_matrix = torch.tensor(np.load("/cluster/home/kguera/SimCLR/outputs/pc_matrix_ipca.npy"), dtype=torch.float32, device=args.device)
+        #eigenvalues = torch.tensor(np.load("/cluster/home/kguera/SimCLR/outputs/eigenvalues_ratio_ipca.npy"), dtype=torch.float32, device=args.device)
     else:
         resize = str(args.stl_resize)
         pca_matrix_path = f"/cluster/home/kguera/SimCLR/outputs/pc_matrix_ipca_stl_{resize}.npy"

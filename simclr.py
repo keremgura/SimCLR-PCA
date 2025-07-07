@@ -89,7 +89,7 @@ class SimCLR(object):
         
         for epoch_counter in range(self.args.epochs):
             self.model.train()
-            self.pca_augmentor.precompute_masks(self.eigenvalues)
+            """self.pca_augmentor.precompute_masks(self.eigenvalues)"""
             epoch_start_time = time.time()
             total_loss = 0.0
             total_top1 = 0.0

@@ -36,6 +36,9 @@ class PCAAugmentorWrapper:
         Apply PCAAugmentor and return two PCA-masked views.
         """
         method = self.masking_method
+                # Treat "patch_agnostic" as standard stochastic patch-wise masking
+        if method == "patch_agnostic":
+            method = "stochastic"
         if method == "auto": # randomly select between the two methods
             method = np.random.choice(["stochastic", "cyclical"])
         elif method == "combined": # one view with each method

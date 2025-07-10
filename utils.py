@@ -145,7 +145,44 @@ def compute_dataset_min_max(dataset):
 def setup_pca(args, dataset):
     if args.pca != 1:
         return None, None
-
+    if args.patch_pca_agnostic:
+        # Determine resize based on dataset
+        resize_str = str(args.stl_resize) if args.dataset_name == "stl10" else "32"
+        # Base directory where patch PCA files are saved
+        patch_dir = "/cluster/home/kguera/SimCLR/outputs/patch_pca"
+        # Construct file paths
+        pca_matrix_path = os.path.join(
+            patch_dir,
+            f"patch_pc_matrix_{args.dataset_name}_{resize_str}_{args.patch_size}.npy"
+        )
+        eigenvalues_path = os.path.join(
+            patch_dir,
+            f"patch_eigenvalues_{args.dataset_name}_{resize_str}_{args.patch_size}.npy"
+        )
+        # Load patch PCA results
+        pca_matrix = torch.tensor(
+            np.load(pca_matrix_path), dtype=torch.float32, device=args.device
+        )
+        eigenvalues = torch.tensor(
+            np.load(eigenvalues_path), dtype=torch.float32, device=args.device
+        )
+        # Build augmentor using the patch PCA basis
+        pca_augmentor = PCAAugmentor(
+            pca_matrix.T,
+            pca_ratio=args.pca_ratio,
+            device=args.device,
+            drop_ratio=args.drop_pc_ratio,
+            shuffle=args.shuffle,
+            base_fractions=args.base_fractions,
+            drop_strategy=args.drop_strategy,
+            double=args.double,
+            interpolate=args.interpolate,
+            pad_strategy=args.pad_strategy,
+            mean=None,
+            std=None
+        )
+        return pca_augmentor, eigenvalues
+        
     if args.dataset_name == "cifar10":
         pca_matrix = torch.tensor(np.load("/cluster/home/kguera/SimCLR/outputs/imagenet32_cifar10_pc_matrix_flipped.npy"), dtype=torch.float32, device=args.device).T
         eigenvalues = torch.tensor(np.load("/cluster/home/kguera/SimCLR/outputs/imagenet32_cifar10_eigenvalues_ratio.npy"), dtype=torch.float32, device=args.device)

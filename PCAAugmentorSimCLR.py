@@ -5,8 +5,11 @@ import torchvision.transforms as transforms
 import torch.nn.functional as F
 
 class PCAAugmentor:
-    def __init__(self, masking_fn_, pca_ratio, shuffle, base_fractions, global_min = None, global_max = None, device="cpu", img_size=32, normalize = True,
-        drop_ratio = 0, drop_strategy = "random", double = False, interpolate = False, pad_strategy = "pad", mean = None, std = None):
+        def __init__(self, masking_fn_, pca_ratio, shuffle, base_fractions,
+                 global_min=None, global_max=None, device="cpu",
+                 img_size=32, patch_size=None, normalize=True,
+                 drop_ratio=0, drop_strategy="random", double=False,
+                 interpolate=False, pad_strategy="pad", mean=None, std=None):
         """
         Initializes the PCA-based augmentor.
         
@@ -19,7 +22,15 @@ class PCAAugmentor:
         self.pca_ratio = pca_ratio  # How much variance to retain
         self.device = device
         self.img_size = img_size
-        self.num_pixels = img_size * img_size * 3
+        # Determine whether using patch PCA (patch_size != None)
+        self.use_patch = patch_size is not None
+        self.patch_size = patch_size
+        if self.use_patch:
+            # dimension of each patch vector
+            self.patch_dim = 3 * patch_size * patch_size
+            self.num_pixels = self.patch_dim
+        else:
+            self.num_pixels = img_size * img_size * 3
         self.normalize = normalize
         self.global_min = global_min
         self.global_max = global_max
@@ -269,6 +280,106 @@ class PCAAugmentor:
         img = img.to(self.device)  # Move image to device
 
         
+        """if not self.use_patch:
+            # --- Global PCA path ---
+            img_flat = img.view(1, -1)  # Flatten image
+            if self.mean is not None and self.std is not None:
+                img_flat = (img_flat - self.mean) / (self.std + 1e-6)
+            if self.precomputed_masks is not None and index is not None:
+                pc_mask_input, pc_mask = self.precomputed_masks[index]
+            else:
+                pc_mask, pc_mask_input = self.compute_pc_mask(eigenvalues)
+
+            D = self.masking_fn_.shape[1]
+
+            if self.interpolate:
+                import random
+                if self.pad_strategy == "random":
+                    strategy_input = random.choice(["pad", "mean", "gaussian", "hybrid"])
+                    strategy_target = random.choice(["pad", "mean", "gaussian", "hybrid"])
+                else:
+                    strategy_input, strategy_target = self.pad_strategy, self.pad_strategy
+
+                
+                p_input_full = pad_matrix(self.masking_fn_, pc_mask, strategy_input, D)
+                p_target_full = pad_matrix(self.masking_fn_, pc_mask_input, strategy_target, D)
+                img_reconstructed = img_flat @ p_input_full @ p_input_full.T
+                target = img_flat @ p_target_full @ p_target_full.T
+            else:
+                # Compute which PCA components to mask
+                p_input = self.masking_fn_[:, pc_mask_input]
+                p_target = self.masking_fn_[:, pc_mask]
+                
+                target = (img_flat @ p_target) @ p_target.T
+                img_reconstructed = (img_flat @ p_input) @ p_input.T
+            
+
+
+            # **Normalize both views to [0,1]**
+            if self.normalize:
+                denom = (img_reconstructed.max() - img_reconstructed.min())
+                if denom < 1e-4:
+                    denom = 1e-4
+                img_reconstructed = (img_reconstructed - img_reconstructed.min()) / denom
+
+                denom_target = target.max() - target.min()
+                if denom_target < 1e-4:
+                    denom_target = 1e-4
+
+                target = (target - target.min()) / denom_target
+                
+
+            
+            #return img_reconstructed.view(img.shape).cpu(), target.view(img.shape).cpu()
+            return img_reconstructed.view(img.shape), target.view(img.shape) # no switching to cpu
+
+        
+        C, H, W = img.shape
+        # 1) Unfold into non-overlapping patches
+        patches = F.unfold(
+            img.unsqueeze(0),
+            kernel_size=self.patch_size,
+            stride=self.patch_size
+        )
+        # [1, patch_dim, num_patches] → [num_patches, patch_dim]
+        P = patches.squeeze(0).transpose(0, 1)
+
+        # 2) For each patch, compute input/target projections
+        recon_patches_in = []
+        recon_patches_tg = []
+        for i in range(P.size(0)):
+            pv = P[i : i + 1]             # [1, patch_dim]
+            pc_in, pc_tg = self.compute_pc_mask(eigenvalues)
+            Pmat = self.masking_fn_       # [patch_dim, num_pcs]
+            Pin = Pmat[:, pc_in]          # select cols for view1
+            Pt  = Pmat[:, pc_tg]          # select cols for view2
+            recon_patches_in.append((pv @ Pin) @ Pin.T)
+            recon_patches_tg.append((pv @ Pt)  @ Pt.T)
+
+        # 3) Fold back into two full images
+        stack_in = torch.cat(recon_patches_in, dim=0).transpose(0, 1).unsqueeze(0)
+        stack_tg = torch.cat(recon_patches_tg, dim=0).transpose(0, 1).unsqueeze(0)
+        img_in = F.fold(
+            stack_in,
+            output_size=(H, W),
+            kernel_size=self.patch_size,
+            stride=self.patch_size
+        ).squeeze(0)
+        img_tg = F.fold(
+            stack_tg,
+            output_size=(H, W),
+            kernel_size=self.patch_size,
+            stride=self.patch_size
+        ).squeeze(0)
+
+        # 4) Normalize both views to [0,1]
+        def norm(x):
+            x = x - x.min()
+            return x / (x.max() - x.min() + 1e-6)
+
+        return norm(img_in), norm(img_tg)"""
+            
+
 
 
         img_flat = img.view(1, -1)  # Flatten image

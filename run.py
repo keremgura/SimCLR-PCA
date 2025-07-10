@@ -88,9 +88,10 @@ parser.add_argument('--double', action='store_true', help = 'enables double shuf
 parser.add_argument('--interpolate', action='store_true', help = 'enables interpolating')
 parser.add_argument('--pad_strategy', default = "random", choices = ["hybrid", "pad", "mean", "gaussian", "random"])
 parser.add_argument('--stl_resize', default = 32, type = int)
-parser.add_argument('--masking_method', default = "global", choices = ["global", "stochastic", "cyclical", "auto", "combined"])
+parser.add_argument('--masking_method', default = "global", choices = ["global", "stochastic", "cyclical", "auto", "combined", "patch_agnostic"])
 parser.add_argument("--base_fractions", type=float, nargs=2, default=[0.1, 0.3], help="Two base fractions for cyclic PCA masking shift per view")
 parser.add_argument("--patch_size", default = 8, type = int)
+parser.add_argument('--patch_pca_agnostic', action='store_true')
 
 parser.add_argument("--warmup_epochs", default = 10, type = int)
 

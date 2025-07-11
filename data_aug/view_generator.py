@@ -39,6 +39,12 @@ class PCAAugmentorWrapper:
                 # Treat "patch_agnostic" as standard stochastic patch-wise masking
         if method == "patch_agnostic":
             method = "stochastic"
+        elif method == "patch_specific":
+            img1, img2 = self.pca_augmentor.extract_views(img, self.eigenvalues)
+            # remove leading batch dim if present
+            if img1.dim() == 2:
+                img1, img2 = img1.squeeze(0), img2.squeeze(0)
+            return [img1, img2]
         if method == "auto": # randomly select between the two methods
             method = np.random.choice(["stochastic", "cyclical"])
         elif method == "combined": # one view with each method

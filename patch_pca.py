@@ -66,12 +66,13 @@ for images, _ in loader:
     patches = (patches - mean) / std
     pca.partial_fit(patches.numpy())
 
-print("Saving PCA results …")
-np.save(os.path.join(output_dir, f"patch_pc_matrix_{resize}_{patch_size}.npy"),
-        pca.components_)
-np.save(os.path.join(output_dir, f"patch_eigenvalues_{resize}_{patch_size}.npy"),
-        pca.explained_variance_)
-np.save(os.path.join(output_dir, f"patch_eigen_ratio_{resize}_{patch_size}.npy"),
-        pca.explained_variance_ratio_)
+print(f"Saving PCA results for dataset '{dataset_name}' …")
+np.save(os.path.join(output_dir, f"patch_pc_matrix_{dataset_name}_{resize}_{patch_size}.npy"),
+    pca.components_)
+np.save(os.path.join(output_dir, f"patch_eigenvalues_{dataset_name}_{resize}_{patch_size}.npy"),
+    pca.explained_variance_)
+np.save(os.path.join(output_dir, f"patch_eigen_ratio_{dataset_name}_{resize}_{patch_size}.npy"),
+    pca.explained_variance_ratio_)
+    
 print("Done. Files in", output_dir)
 

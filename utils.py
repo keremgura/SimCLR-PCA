@@ -182,6 +182,41 @@ def setup_pca(args, dataset):
             std=None
         )
         return pca_augmentor, eigenvalues
+
+    if args.patch_pca_specific:
+        # Position-specific patch PCA loading
+        resize = args.stl_resize if args.dataset_name == "stl10" else 32
+        H_p = W_p = resize // args.patch_size
+        # Prepare grids to hold per-cell bases and eigenvalues
+        pca_matrix_grid = [[None for _ in range(W_p)] for _ in range(H_p)]
+        eigenvalues_grid = [[None for _ in range(W_p)] for _ in range(H_p)]
+        for i in range(H_p):
+            for j in range(W_p):
+                base = f"pos_{i}_{j}_{args.dataset_name}_{resize}_{args.patch_size}"
+                matrix_path = os.path.join(args.patch_pca_dir, f"patch_pc_matrix_{base}.npy")
+                eig_path    = os.path.join(args.patch_pca_dir, f"patch_eigenvalues_{base}.npy")
+                # Load into tensors on the correct device
+                pca_matrix_grid[i][j]  = torch.tensor(np.load(matrix_path), dtype=torch.float32, device=args.device)
+                eigenvalues_grid[i][j] = torch.tensor(np.load(eig_path), dtype=torch.float32, device=args.device)
+        # Build augmentor in position-specific mode
+        pca_augmentor = PCAAugmentor(
+            masking_fn_=pca_matrix_grid,
+            pca_ratio=args.pca_ratio,
+            device=args.device,
+            drop_ratio=args.drop_pc_ratio,
+            shuffle=args.shuffle,
+            base_fractions=args.base_fractions,
+            drop_strategy=args.drop_strategy,
+            double=args.double,
+            interpolate=args.interpolate,
+            pad_strategy=args.pad_strategy,
+            mean=None,
+            std=None,
+            patch_size=args.patch_size,
+            patch_specific=True
+        )
+        return pca_augmentor, eigenvalues_grid
+
         
     if args.dataset_name == "cifar10":
         pca_matrix = torch.tensor(np.load("/cluster/home/kguera/SimCLR/outputs/imagenet32_cifar10_pc_matrix_flipped.npy"), dtype=torch.float32, device=args.device).T
@@ -224,6 +259,8 @@ def setup_pca(args, dataset):
                                 mean = mean, std = std)
 
     return pca_augmentor, eigenvalues
+
+
 class DatasetWithIndex(torch.utils.data.Dataset):
     def __init__(self, dataset):
         self.dataset = dataset

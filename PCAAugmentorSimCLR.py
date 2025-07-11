@@ -7,9 +7,10 @@ import torch.nn.functional as F
 class PCAAugmentor:
         def __init__(self, masking_fn_, pca_ratio, shuffle, base_fractions,
                  global_min=None, global_max=None, device="cpu",
-                 img_size=32, patch_size=None, normalize=True,
-                 drop_ratio=0, drop_strategy="random", double=False,
-                 interpolate=False, pad_strategy="pad", mean=None, std=None):
+                 img_size=32, patch_size=None, patch_specific=False,
+                 normalize=True, drop_ratio=0, drop_strategy="random",
+                 double=False, interpolate=False, pad_strategy="pad",
+                 mean=None, std=None):
         """
         Initializes the PCA-based augmentor.
         
@@ -24,7 +25,16 @@ class PCAAugmentor:
         self.img_size = img_size
         # Determine whether using patch PCA (patch_size != None)
         self.use_patch = patch_size is not None
+        self.patch_specific = patch_specific
         self.patch_size = patch_size
+
+        if self.patch_specific:
+            # masking_fn_ is now a 2D list: pca_matrix_grid[i][j]
+            self.pca_matrix_grid = masking_fn_
+        else:
+            # single basis (global or agnostic-patch)
+            self.masking_fn_ = masking_fn_.to(device)
+
         if self.use_patch:
             # dimension of each patch vector
             self.patch_dim = 3 * patch_size * patch_size
@@ -274,6 +284,54 @@ class PCAAugmentor:
                     noise = torch.randn((P_full.shape[0], len(gaussian_indices)), device=device) * std
                     P_padded[:, gaussian_indices] = noise
             return P_padded
+
+        """if self.patch_specific:
+            # assume img.shape == [C,H,W] and H,W divisible by patch_size
+            C, H, W = img.shape
+            H_p = W_p = H // self.patch_size
+
+            # unfold into [1, patch_dim, H_p*W_p]
+            patches = F.unfold(
+                img.unsqueeze(0),
+                kernel_size=self.patch_size,
+                stride=self.patch_size
+            )
+            # → [num_patches, patch_dim]
+            P = patches.squeeze(0).transpose(0,1)
+
+            recon_in, recon_tg = [], []
+            for idx in range(H_p * W_p):
+                i, j = divmod(idx, W_p)
+                Pmat = self.pca_matrix_grid[i][j]      # [patch_dim, K]
+                eigs = eigenvalues[i][j]               # [K]
+                pc_in, pc_tg = self.compute_pc_mask(eigs)
+
+                pv = P[idx:idx+1]                       # [1, patch_dim]
+                Pin = Pmat[:, pc_in]                   # [patch_dim, #in]
+                Pt  = Pmat[:, pc_tg]                   # [patch_dim, #tg]
+
+                recon_in.append((pv @ Pin) @ Pin.T)    # [1, patch_dim]
+                recon_tg.append((pv @ Pt)  @ Pt.T)     # [1, patch_dim]
+
+            # fold back into images
+            stack_in = torch.cat(recon_in, dim=0).transpose(0,1).unsqueeze(0)
+            stack_tg = torch.cat(recon_tg, dim=0).transpose(0,1).unsqueeze(0)
+
+            img1 = F.fold(
+                stack_in, output_size=(H,W),
+                kernel_size=self.patch_size, stride=self.patch_size
+            ).squeeze(0)
+            img2 = F.fold(
+                stack_tg, output_size=(H,W),
+                kernel_size=self.patch_size, stride=self.patch_size
+            ).squeeze(0)
+
+            # normalize to [0,1]
+            def norm(x):
+                x = x - x.min()
+                return x / (x.max() - x.min() + 1e-6)
+
+            return norm(img1), norm(img2)"""
 
         if not isinstance(img, torch.Tensor):
             img = self.to_tensor(img)

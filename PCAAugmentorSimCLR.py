@@ -11,14 +11,8 @@ class PCAAugmentor:
                  normalize=True, drop_ratio=0, drop_strategy="random",
                  double=False, interpolate=False, pad_strategy="pad",
                  mean=None, std=None):
-        """
-        Initializes the PCA-based augmentor.
         
-        Args:
-            masking_fn_: The PCA transformation matrix (shape: num_pixels x num_pcs).
-            pca_ratio: The fraction of PCA components to mask.
-            device: Device to run computations on.
-        """
+        
         self.masking_fn_ = masking_fn_.to(device)  # PCA transformation matrix     
         self.pca_ratio = pca_ratio  # How much variance to retain
         self.device = device

@@ -37,9 +37,8 @@ class PCAAugmentorWrapper:
         """
         method = self.masking_method
                 # Treat "patch_agnostic" as standard stochastic patch-wise masking
-        if method == "patch_agnostic":
-            method = "stochastic"
-        elif method == "patch_specific":
+        
+        if method in ("patch_agnostic", "patch_specific"):
             img1, img2 = self.pca_augmentor.extract_views(img, self.eigenvalues)
             # remove leading batch dim if present
             if img1.dim() == 2:

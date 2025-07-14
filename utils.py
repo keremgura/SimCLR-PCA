@@ -174,6 +174,7 @@ def setup_pca(args, dataset):
             drop_ratio=args.drop_pc_ratio,
             shuffle=args.shuffle,
             base_fractions=args.base_fractions,
+            patch_size=args.patch_size,
             drop_strategy=args.drop_strategy,
             double=args.double,
             interpolate=args.interpolate,
@@ -184,6 +185,7 @@ def setup_pca(args, dataset):
         return pca_augmentor, eigenvalues
 
     if args.patch_pca_specific:
+        patch_dir = "/cluster/home/kguera/SimCLR/outputs/patch_pca_pos"
         # Position-specific patch PCA loading
         resize = args.stl_resize if args.dataset_name == "stl10" else 32
         H_p = W_p = resize // args.patch_size
@@ -193,8 +195,8 @@ def setup_pca(args, dataset):
         for i in range(H_p):
             for j in range(W_p):
                 base = f"pos_{i}_{j}_{args.dataset_name}_{resize}_{args.patch_size}"
-                matrix_path = os.path.join(args.patch_pca_dir, f"patch_pc_matrix_{base}.npy")
-                eig_path    = os.path.join(args.patch_pca_dir, f"patch_eigenvalues_{base}.npy")
+                matrix_path = os.path.join(patch_dir, f"patch_pc_matrix_{base}.npy")
+                eig_path    = os.path.join(patch_dir, f"patch_eigenvalues_{base}.npy")
                 # Load into tensors on the correct device
                 pca_matrix_grid[i][j]  = torch.tensor(np.load(matrix_path), dtype=torch.float32, device=args.device)
                 eigenvalues_grid[i][j] = torch.tensor(np.load(eig_path), dtype=torch.float32, device=args.device)

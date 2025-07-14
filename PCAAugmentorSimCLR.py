@@ -5,7 +5,7 @@ import torchvision.transforms as transforms
 import torch.nn.functional as F
 
 class PCAAugmentor:
-        def __init__(self, masking_fn_, pca_ratio, shuffle, base_fractions,
+    def __init__(self, masking_fn_, pca_ratio, shuffle, base_fractions,
                  global_min=None, global_max=None, device="cpu",
                  img_size=32, patch_size=None, patch_specific=False,
                  normalize=True, drop_ratio=0, drop_strategy="random",
@@ -13,7 +13,7 @@ class PCAAugmentor:
                  mean=None, std=None):
         
         
-        self.masking_fn_ = masking_fn_.to(device)  # PCA transformation matrix     
+        #self.masking_fn_ = masking_fn_.to(device)  # PCA transformation matrix     
         self.pca_ratio = pca_ratio  # How much variance to retain
         self.device = device
         self.img_size = img_size
@@ -48,10 +48,10 @@ class PCAAugmentor:
         self.precomputed_masks = None
 
         
-        self.mean = mean.clone().detach().to(dtype=torch.float32, device=device)
-        self.std = std.clone().detach().to(dtype=torch.float32, device=device)
-        """self.mean = torch.tensor(mean, dtype=torch.float32, device=device) if mean is not None else None
-        self.std = torch.tensor(std, dtype=torch.float32, device=device) if std is not None else None"""
+        """self.mean = mean.clone().detach().to(dtype=torch.float32, device=device)
+        self.std = std.clone().detach().to(dtype=torch.float32, device=device)"""
+        self.mean = torch.tensor(mean, dtype=torch.float32, device=device) if mean is not None else None
+        self.std = torch.tensor(std, dtype=torch.float32, device=device) if std is not None else None
         
 
         self.to_tensor = transforms.ToTensor()
@@ -279,7 +279,11 @@ class PCAAugmentor:
                     P_padded[:, gaussian_indices] = noise
             return P_padded
 
-        """if self.patch_specific:
+        if not isinstance(img, torch.Tensor):
+            img = self.to_tensor(img)
+        img = img.to(self.device)  # Move image to device
+
+        if self.patch_specific:
             # assume img.shape == [C,H,W] and H,W divisible by patch_size
             C, H, W = img.shape
             H_p = W_p = H // self.patch_size
@@ -296,7 +300,7 @@ class PCAAugmentor:
             recon_in, recon_tg = [], []
             for idx in range(H_p * W_p):
                 i, j = divmod(idx, W_p)
-                Pmat = self.pca_matrix_grid[i][j]      # [patch_dim, K]
+                Pmat = self.pca_matrix_grid[i][j].T      # [patch_dim, K]
                 eigs = eigenvalues[i][j]               # [K]
                 pc_in, pc_tg = self.compute_pc_mask(eigs)
 
@@ -325,14 +329,12 @@ class PCAAugmentor:
                 x = x - x.min()
                 return x / (x.max() - x.min() + 1e-6)
 
-            return norm(img1), norm(img2)"""
-
-        if not isinstance(img, torch.Tensor):
-            img = self.to_tensor(img)
-        img = img.to(self.device)  # Move image to device
+            return norm(img1), norm(img2)
 
         
-        """if not self.use_patch:
+
+        
+        if not self.use_patch:
             # --- Global PCA path ---
             img_flat = img.view(1, -1)  # Flatten image
             if self.mean is not None and self.std is not None:
@@ -429,12 +431,12 @@ class PCAAugmentor:
             x = x - x.min()
             return x / (x.max() - x.min() + 1e-6)
 
-        return norm(img_in), norm(img_tg)"""
+        return norm(img_in), norm(img_tg)
             
 
 
 
-        img_flat = img.view(1, -1)  # Flatten image
+        """img_flat = img.view(1, -1)  # Flatten image
 
         if self.mean is not None and self.std is not None:
             img_flat = (img_flat - self.mean) / (self.std + 1e-6)
@@ -487,7 +489,7 @@ class PCAAugmentor:
 
         
         #return img_reconstructed.view(img.shape).cpu(), target.view(img.shape).cpu()
-        return img_reconstructed.view(img.shape), target.view(img.shape) # no switching to cpu
+        return img_reconstructed.view(img.shape), target.view(img.shape) # no switching to cpu"""
 
 
     """def extract_views_batch(self, imgs: torch.Tensor, eigenvalues: torch.Tensor):

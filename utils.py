@@ -159,6 +159,13 @@ def setup_pca(args, dataset):
             patch_dir,
             f"patch_eigenvalues_{args.dataset_name}_{resize_str}_{args.patch_size}.npy"
         )
+
+        mean_path = os.path.join(
+            patch_dir,
+            f"patch_mean_{args.dataset_name}_{resize_str}_{args.patch_size}.npy")
+        std_path = os.path.join(
+            patch_dir,
+            f"patch_std_{args.dataset_name}_{resize_str}_{args.patch_size}.npy")
         # Load patch PCA results
         pca_matrix = torch.tensor(
             np.load(pca_matrix_path), dtype=torch.float32, device=args.device
@@ -166,6 +173,11 @@ def setup_pca(args, dataset):
         eigenvalues = torch.tensor(
             np.load(eigenvalues_path), dtype=torch.float32, device=args.device
         )
+
+        # Load patch mean and std
+        mean = torch.from_numpy(np.load(mean_path)).to(args.device)
+        std = torch.from_numpy(np.load(std_path)).to(args.device)
+        # Build augmentor using the patch PCA basis, global patch mean/std
         # Build augmentor using the patch PCA basis
         pca_augmentor = PCAAugmentor(
             pca_matrix.T,
@@ -179,9 +191,8 @@ def setup_pca(args, dataset):
             double=args.double,
             interpolate=args.interpolate,
             pad_strategy=args.pad_strategy,
-            mean=None,
-            std=None
-        )
+            mean=mean,
+            std=std)
         return pca_augmentor, eigenvalues
 
     if args.patch_pca_specific:
@@ -200,6 +211,16 @@ def setup_pca(args, dataset):
                 # Load into tensors on the correct device
                 pca_matrix_grid[i][j]  = torch.tensor(np.load(matrix_path), dtype=torch.float32, device=args.device)
                 eigenvalues_grid[i][j] = torch.tensor(np.load(eig_path), dtype=torch.float32, device=args.device)
+
+        mean_grid = [[None]*W_p for _ in range(H_p)]
+        std_grid  = [[None]*W_p for _ in range(H_p)]
+        for i in range(H_p):
+            for j in range(W_p):
+                base = f"pos_{i}_{j}_{args.dataset_name}_{resize}_{args.patch_size}"
+                mean_path = os.path.join(patch_dir, f"patch_mean_{base}.npy")
+                std_path  = os.path.join(patch_dir, f"patch_std_{base}.npy")
+                mean_grid[i][j] = torch.from_numpy(np.load(mean_path)).to(args.device)
+                std_grid[i][j]  = torch.from_numpy(np.load(std_path)).to(args.device)
         # Build augmentor in position-specific mode
         pca_augmentor = PCAAugmentor(
             masking_fn_=pca_matrix_grid,
@@ -215,24 +236,27 @@ def setup_pca(args, dataset):
             mean=None,
             std=None,
             patch_size=args.patch_size,
-            patch_specific=True
+            patch_specific=True,
+            mean_grid=mean_grid,
+            std_grid=std_grid
         )
         return pca_augmentor, eigenvalues_grid
 
-        
-    if args.dataset_name == "cifar10":
-        pca_matrix = torch.tensor(np.load("/cluster/home/kguera/SimCLR/outputs/imagenet32_cifar10_pc_matrix_flipped.npy"), dtype=torch.float32, device=args.device).T
-        eigenvalues = torch.tensor(np.load("/cluster/home/kguera/SimCLR/outputs/imagenet32_cifar10_eigenvalues_ratio.npy"), dtype=torch.float32, device=args.device)
+    pca_matrix = torch.tensor(np.load("/cluster/home/kguera/SimCLR/outputs/pc_matrix_ipca.npy"), dtype=torch.float32, device=args.device)
+    eigenvalues = torch.tensor(np.load("/cluster/home/kguera/SimCLR/outputs/eigenvalues_ratio_ipca.npy"), dtype=torch.float32, device=args.device)
+    """if args.dataset_name == "cifar10":
+        #pca_matrix = torch.tensor(np.load("/cluster/home/kguera/SimCLR/outputs/imagenet32_cifar10_pc_matrix_flipped.npy"), dtype=torch.float32, device=args.device).T
+        #eigenvalues = torch.tensor(np.load("/cluster/home/kguera/SimCLR/outputs/imagenet32_cifar10_eigenvalues_ratio.npy"), dtype=torch.float32, device=args.device)
 
 
-        #pca_matrix = torch.tensor(np.load("/cluster/home/kguera/SimCLR/outputs/pc_matrix_ipca.npy"), dtype=torch.float32, device=args.device)
-        #eigenvalues = torch.tensor(np.load("/cluster/home/kguera/SimCLR/outputs/eigenvalues_ratio_ipca.npy"), dtype=torch.float32, device=args.device)
+        pca_matrix = torch.tensor(np.load("/cluster/home/kguera/SimCLR/outputs/pc_matrix_ipca.npy"), dtype=torch.float32, device=args.device)
+        eigenvalues = torch.tensor(np.load("/cluster/home/kguera/SimCLR/outputs/eigenvalues_ratio_ipca.npy"), dtype=torch.float32, device=args.device)
     else:
         resize = str(args.stl_resize)
         pca_matrix_path = f"/cluster/home/kguera/SimCLR/outputs/pc_matrix_ipca_stl_{resize}.npy"
         eigenvalues_path = f"/cluster/home/kguera/SimCLR/outputs/eigenvalues_ratio_ipca_stl_{resize}.npy"
         pca_matrix = torch.tensor(np.load(pca_matrix_path), dtype=torch.float32, device=args.device)
-        eigenvalues = torch.tensor(np.load(eigenvalues_path), dtype=torch.float32, device=args.device)
+        eigenvalues = torch.tensor(np.load(eigenvalues_path), dtype=torch.float32, device=args.device)"""
 
    
 

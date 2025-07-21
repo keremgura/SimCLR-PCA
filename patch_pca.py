@@ -11,7 +11,7 @@ from sklearn.decomposition import IncrementalPCA
 import argparse
 
 parser = argparse.ArgumentParser(description="Fit patch-level PCA")
-parser.add_argument('--dataset', choices=['stl10', 'cifar10'], default='stl10',
+parser.add_argument('--dataset', choices=['stl10', 'cifar10'], default='cifar10',
                     help="Dataset to use for PCA (stl10 or cifar10)")
 args = parser.parse_args()
 
@@ -53,6 +53,26 @@ pca = IncrementalPCA()
 
 # —— Patch extraction helper —— 
 unfold = torch.nn.Unfold(kernel_size=patch_size, stride=patch_size)
+
+print("Computing global patch mean/std …")
+sum_patches = np.zeros(d, dtype=np.float64)
+sum_sq_patches = np.zeros(d, dtype=np.float64)
+count = 0
+for images, _ in loader:
+    patches = unfold(images)  # [B, d, num_patches]
+    patches = patches.permute(0, 2, 1).contiguous().view(-1, d)
+    arr = patches.numpy()
+    sum_patches += arr.sum(axis=0)
+    sum_sq_patches += np.square(arr).sum(axis=0)
+    count += arr.shape[0]
+mean = sum_patches / count
+var = sum_sq_patches / count - mean ** 2
+std = np.sqrt(var + 1e-8)
+
+# Save global patch mean and std
+np.save(os.path.join(output_dir, f"patch_mean_{dataset_name}_{resize}_{patch_size}.npy"), mean)
+np.save(os.path.join(output_dir, f"patch_std_{dataset_name}_{resize}_{patch_size}.npy"), std)
+print("Mean/std saved.")
 
 print("Fitting patch‐level PCA …")
 for images, _ in loader:

@@ -7,7 +7,7 @@ import torch.nn.functional as F
 class PCAAugmentor:
     def __init__(self, masking_fn_, pca_ratio, shuffle, base_fractions,
                  global_min=None, global_max=None, device="cpu",
-                 img_size=32, patch_size=None, patch_specific=False,
+                 img_size=32, patch_size=None, patch_specific=False, mean_grid=None, std_grid=None,
                  normalize=True, drop_ratio=0, drop_strategy="random",
                  double=False, interpolate=False, pad_strategy="pad",
                  mean=None, std=None):
@@ -25,6 +25,8 @@ class PCAAugmentor:
         if self.patch_specific:
             # masking_fn_ is now a 2D list: pca_matrix_grid[i][j]
             self.pca_matrix_grid = masking_fn_
+            self.mean_grid = mean_grid
+            self.std_grid  = std_grid
         else:
             # single basis (global or agnostic-patch)
             self.masking_fn_ = masking_fn_.to(device)
@@ -74,6 +76,8 @@ class PCAAugmentor:
             #cumsum = np.cumsum(sorted_eigvals)
             sorted_eigvals = eigenvalues[sorted_indices]
             cumsum = torch.cumsum(sorted_eigvals, dim=0)
+
+            #print(cumsum[:10])
 
             
 
@@ -302,9 +306,19 @@ class PCAAugmentor:
                 i, j = divmod(idx, W_p)
                 Pmat = self.pca_matrix_grid[i][j].T      # [patch_dim, K]
                 eigs = eigenvalues[i][j]               # [K]
+                mean_v  = self.mean_grid[i][j].unsqueeze(0)  # [1, d]
+                std_v   = self.std_grid[i][j].unsqueeze(0) 
+
+                pv_raw = P[idx:idx+1]                      # [1, d]
+                pv    = (pv_raw - mean_v) / std_v          # [1, d]
+
                 pc_in, pc_tg = self.compute_pc_mask(eigs)
 
-                pv = P[idx:idx+1]                       # [1, patch_dim]
+                """total_var = eigs.sum()
+                cum_var = torch.cumsum(eigs / total_var, dim=0)[:10]
+                print(f"Patch {idx}: Cumulative variance:", cum_var.detach().cpu().numpy())"""
+
+                #pv = P[idx:idx+1]                       # [1, patch_dim]
                 Pin = Pmat[:, pc_in]                   # [patch_dim, #in]
                 Pt  = Pmat[:, pc_tg]                   # [patch_dim, #tg]
 
@@ -403,7 +417,12 @@ class PCAAugmentor:
         recon_patches_tg = []
         for i in range(P.size(0)):
             pv = P[i : i + 1]             # [1, patch_dim]
+            pv = (pv - self.mean) / (self.std + 1e-6)
             pc_in, pc_tg = self.compute_pc_mask(eigenvalues)
+            # Print cumulative variance info for each patch
+            """total_var = eigenvalues.sum()
+            cum_var = torch.cumsum(eigenvalues / total_var, dim=0)[:10]
+            print(f"Patch {i}: Cumulative variance:", cum_var.detach().cpu().numpy())"""
             Pmat = self.masking_fn_       # [patch_dim, num_pcs]
             Pin = Pmat[:, pc_in]          # select cols for view1
             Pt  = Pmat[:, pc_tg]          # select cols for view2

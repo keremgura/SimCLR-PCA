@@ -10,7 +10,7 @@ from sklearn.decomposition import IncrementalPCA
 import argparse
 
 parser = argparse.ArgumentParser(description="Fit position-specific patch PCA")
-parser.add_argument('--dataset', choices=['stl10','cifar10'], default='stl10',
+parser.add_argument('--dataset', choices=['stl10','cifar10'], default='cifar10',
                     help="Which dataset to use")
 parser.add_argument('--resize',    type=int, default=32,
                     help="Image side length after resize")
@@ -79,4 +79,25 @@ for i in range(H_p):
             os.path.join(args.output_dir, f"patch_eigen_ratio_{base}.npy"),
             pca_grid[i][j].explained_variance_ratio_
         )
+
+
+for i in range(H_p):
+    for j in range(W_p):
+        # patches for cell (i,j): shape [B, d]
+        cell_patches = patches[:, idx, :].reshape(-1, d).numpy()
+        
+        # Compute mean & std on raw patches
+        mean_vec = cell_patches.mean(axis=0)           # [d]
+        std_vec  = cell_patches.std(axis=0) + 1e-8     # [d]
+        
+        # Standardize for PCA
+        cell_patches = (cell_patches - mean_vec) / std_vec
+        
+        # Incremental PCA
+        pca_grid[i][j].partial_fit(cell_patches)
+        
+        # Save mean/std for this cell
+        np.save(os.path.join(args.output_dir, f"patch_mean_pos_{i}_{j}_{args.dataset}_{args.resize}_{args.patch_size}.npy"), mean_vec)
+        np.save(os.path.join(args.output_dir, f"patch_std_pos_{i}_{j}_{args.dataset}_{args.resize}_{args.patch_size}.npy"), std_vec)
+
 print("Done. PCA files in", args.output_dir)

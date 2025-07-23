@@ -30,7 +30,7 @@ class SimCLR(object):
 
         experiment_name = generate_experiment_name(self.args)
 
-        #self.writer = SummaryWriter()
+        
         self.writer = SummaryWriter(log_dir=os.path.join("runs", experiment_name))
         logging.basicConfig(filename=os.path.join(self.writer.log_dir, 'training.log'), level=logging.DEBUG)
         self.criterion = torch.nn.CrossEntropyLoss().to(self.args.device) # applied on contrastive learning logits
@@ -89,8 +89,8 @@ class SimCLR(object):
         
         for epoch_counter in range(self.args.epochs):
             self.model.train()
-            """self.pca_augmentor.precompute_masks(self.eigenvalues)"""
-            epoch_start_time = time.time()
+            
+            
             total_loss = 0.0
             total_top1 = 0.0
             total_samples = 0
@@ -99,9 +99,6 @@ class SimCLR(object):
                 start_time = time.time()
                 load_start = time.time()
 
-
-                """view1, view2 = self.pca_augmentor.extract_views(images, self.eigenvalues, index=indices)
-                images = torch.cat([view1, view2], dim=0)"""
                 
                 images = torch.cat(images, dim=0)
                 start = time.time()
@@ -109,24 +106,19 @@ class SimCLR(object):
 
                 torch.cuda.synchronize()
                 
-                #print("device:", time.time() - start)
-                load_end = time.time()
 
                 with autocast(enabled=self.args.fp16_precision):
-                    forward_start = time.time()
                     features = self.model(images) # forward pass through resnet
                     logits, labels = self.info_nce_loss(features) # compute contrastive loss
                     loss = self.criterion(logits, labels)
-                    forward_end = time.time()
 
-                backward_start = time.time()
+                
                 self.optimizer.zero_grad()
 
                 scaler.scale(loss).backward()
 
                 scaler.step(self.optimizer)
                 scaler.update()
-                backward_end = time.time()
 
                 batch_size = labels.size(0)
                 top1, top5 = accuracy(logits, labels, topk=(1, 5))
@@ -144,55 +136,30 @@ class SimCLR(object):
                     self.writer.add_scalar('acc/top5', top5[0], global_step=n_iter)
                     #self.writer.add_scalar('learning_rate', self.scheduler.get_lr()[0], global_step=n_iter)
                     self.writer.add_scalar('Time/Batch', time.time() - start_time, global_step=n_iter)
-
-                    """wandb.log({
-                        'loss': loss.item(),
-                        'acc/top1': top1[0].item(),
-                        'acc/top5': top5[0].item(),
-                        'learning_rate': self.scheduler.get_lr()[0],
-                        'Time/Batch': time.time() - start_time,
-                        'step': n_iter
-                    })"""
-
+                    
                 n_iter += 1
-
-            """# warmup for the first 10 epochs
-            if epoch_counter >= 10:
-                self.scheduler.step()"""
 
             self.scheduler.step(epoch_counter)
 
             avg_loss = total_loss / total_samples
             avg_top1 = total_top1 / total_samples
             
-            #logging.debug(f"Epoch: {epoch_counter}\tLoss: {loss}\tTop1 accuracy: {top1[0]}")
+            
             logging.debug(f"Epoch: {epoch_counter}\tLoss: {avg_loss:.4f}\tTop1 accuracy: {avg_top1:.2f}")
             self.writer.add_scalar('train/epoch_loss', avg_loss, epoch_counter)
             self.writer.add_scalar('train/epoch_top1', avg_top1, epoch_counter)
 
-            """print(f"[Epoch {epoch_counter}] GPU Max Allocated: {torch.cuda.max_memory_allocated() / 1e6:.1f} MB")
-            print(f"[Epoch {epoch_counter}] GPU Max Reserved: {torch.cuda.max_memory_reserved() / 1e6:.1f} MB")"""
-
-
-            """wandb.log({
-                'train/epoch_loss': avg_loss,
-                'train/epoch_top1': avg_top1,
-                'epoch': epoch_counter
-            })"""
+            
 
             if val_loader is not None:
                 val_contrastive_loss, val_cls_acc, val_top1_acc = self.validate(val_loader)
                 self.writer.add_scalar('val/contrastive_loss', val_contrastive_loss, epoch_counter)
                 self.writer.add_scalar('val/contrastive_top1', val_top1_acc, epoch_counter)
 
-                """wandb.log({
-                    'val/contrastive_loss': val_contrastive_loss,
-                    'val/contrastive_top1': val_top1_acc,
-                    'epoch': epoch_counter
-                })"""
                 logging.info(f"Validation Contrastive Loss after epoch {epoch_counter}: {val_contrastive_loss:.4f}, Top1 Accuracy: {val_top1_acc:.2f}")
 
         logging.info("Training has finished.")
+
         # save model checkpoints
         checkpoint_name = 'checkpoint_{:04d}.pth.tar'.format(self.args.epochs)
         save_checkpoint({
@@ -221,7 +188,7 @@ class SimCLR(object):
 
         with torch.no_grad():
             for images, labels in val_loader:
-                images = torch.cat(images, dim=0).to(self.args.device)  # [2B, C, H, W]
+                images = torch.cat(images, dim=0).to(self.args.device)
                 
                 features = self.model(images)
                 logits, contrastive_labels = self.info_nce_loss(features)
@@ -235,7 +202,7 @@ class SimCLR(object):
                 val_top1_accuracies.append(top1[0].item())
 
                 # Classifier evaluation (single view)
-                single_view = images[:labels.size(0)]  # Use only the first view
+                single_view = images[:labels.size(0)]
                 with autocast(enabled=self.args.fp16_precision):
                     extracted_features = self.model(single_view)
                 feature_list.append(extracted_features.detach())
@@ -243,11 +210,11 @@ class SimCLR(object):
 
         all_features = torch.cat(feature_list, dim=0)
         all_labels = torch.cat(label_list, dim=0)
-        #print("Unique labels:", all_labels.unique())
-        #print("Classifier output dim:", logits.shape[1])
+
         # Train linear classifier
         classifier.train()
-        for _ in range(100):
+        classifier_epoch = 100
+        for _ in range(classifier_epoch):
             classifier_optimizer.zero_grad()
             logits = classifier(all_features)
             loss = classifier_criterion(logits, all_labels)
@@ -293,9 +260,7 @@ class SimCLR(object):
         classifier, optimizer, criterion = get_linear_classifier(
             out_dim=out_dim, device=self.args.device)
 
-        """# Split dataset: 90% train / 10% test
-        probe_size = int(0.8 * len(full_dataset))
-        probe_train, probe_test = random_split(full_dataset, [probe_size, len(full_dataset) - probe_size])"""
+        
 
         train_loader = DataLoader(probe_train, batch_size=self.args.batch_size, shuffle=True,
                                 num_workers=self.args.workers, drop_last=False)
@@ -343,15 +308,7 @@ class SimCLR(object):
             top1_test /= (counter + 1)
             top5_test /= (counter + 1)
 
-            #print(f"Epoch {ep}\tTop1 Train accuracy {top1_train_acc.item():.2f}\tTop1 Test accuracy: {top1_test.item():.2f}\tTop5 test acc: {top5_test.item():.2f}")
             log_msg = f"LINEAR PROBE FULL — Epoch {ep}\tTop1 Train accuracy: {top1_train_acc.item():.2f}\tTop1 Test accuracy: {top1_test.item():.2f}\tTop5 Test Accuracy: {top5_test.item():.2f}"
-
-            """wandb.log({
-                "linear_probe/train_top1": top1_train_acc.item(),
-                "linear_probe/test_top1": top1_test.item(),
-                "linear_probe/test_top5": top5_test.item(),
-                "linear_probe/epoch": ep
-            })"""
 
             # Log final values
             if self.writer is not None:

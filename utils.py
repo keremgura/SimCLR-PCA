@@ -58,12 +58,8 @@ def get_linear_classifier(out_dim, num_classes=10, device='cuda'):
 
 
 def generate_experiment_name(args, prefix="simclr"):
-    """
-    Generate a standardized experiment name using SimCLR config options.
-    
-    Format: {prefix}_pca_{pca_ratio}_{pca_flag}_{extra_flag}_{timestamp}
-    Example: simclr_pca_07_pca_extra_Mar26_20-15-05
-    """
+    """Generate a standardized experiment name using SimCLR config options."""
+
     timestamp = datetime.now().strftime("%b%d_%H-%M-%S")
 
     # Base components
@@ -112,8 +108,7 @@ def generate_experiment_name(args, prefix="simclr"):
         batch_size,
         patch_size,
         timestamp,
-        vit_flag
-    ]
+        vit_flag]
 
     # Filter out empty strings (e.g., when double or vit is not active)
     experiment_name = "_".join(filter(None, parts))
@@ -134,7 +129,6 @@ def compute_dataset_min_max(dataset):
             images = [img_sample]
 
         for img in images:
-            # Only apply ToTensor if it's a PIL Image or ndarray
             if not isinstance(img, torch.Tensor):
                 img = transforms.ToTensor()(img)
             global_min = min(global_min, img.min().item())
@@ -149,36 +143,25 @@ def setup_pca(args, dataset):
         # Determine resize based on dataset
         resize_str = str(args.stl_resize) if args.dataset_name == "stl10" else "32"
         # Base directory where patch PCA files are saved
-        patch_dir = "/cluster/home/kguera/SimCLR/outputs/patch_pca"
+        patch_dir = os.path.join(os.path.dirname(__file__), "outputs", "patch_pca")
         # Construct file paths
-        pca_matrix_path = os.path.join(
-            patch_dir,
-            f"patch_pc_matrix_{args.dataset_name}_{resize_str}_{args.patch_size}.npy"
-        )
-        eigenvalues_path = os.path.join(
-            patch_dir,
-            f"patch_eigenvalues_{args.dataset_name}_{resize_str}_{args.patch_size}.npy"
-        )
+        pca_matrix_path = os.path.join(patch_dir, f"patch_pc_matrix_{args.dataset_name}_{resize_str}_{args.patch_size}.npy")
+        eigenvalues_path = os.path.join(patch_dir, f"patch_eigenvalues_{args.dataset_name}_{resize_str}_{args.patch_size}.npy")
 
-        mean_path = os.path.join(
-            patch_dir,
+        mean_path = os.path.join(patch_dir,
             f"patch_mean_{args.dataset_name}_{resize_str}_{args.patch_size}.npy")
-        std_path = os.path.join(
-            patch_dir,
+        std_path = os.path.join(patch_dir,
             f"patch_std_{args.dataset_name}_{resize_str}_{args.patch_size}.npy")
         # Load patch PCA results
         pca_matrix = torch.tensor(
-            np.load(pca_matrix_path), dtype=torch.float32, device=args.device
-        )
+            np.load(pca_matrix_path), dtype=torch.float32, device=args.device)
         eigenvalues = torch.tensor(
-            np.load(eigenvalues_path), dtype=torch.float32, device=args.device
-        )
+            np.load(eigenvalues_path), dtype=torch.float32, device=args.device)
 
         # Load patch mean and std
         mean = torch.from_numpy(np.load(mean_path)).to(args.device)
         std = torch.from_numpy(np.load(std_path)).to(args.device)
-        # Build augmentor using the patch PCA basis, global patch mean/std
-        # Build augmentor using the patch PCA basis
+        
         pca_augmentor = PCAAugmentor(
             pca_matrix.T,
             pca_ratio=args.pca_ratio,
@@ -193,10 +176,11 @@ def setup_pca(args, dataset):
             pad_strategy=args.pad_strategy,
             mean=mean,
             std=std)
+
         return pca_augmentor, eigenvalues
 
     if args.patch_pca_specific:
-        patch_dir = "/cluster/home/kguera/SimCLR/outputs/patch_pca_pos"
+        patch_dir = os.path.join(os.path.dirname(__file__), "outputs", "patch_pca_pos")
         # Position-specific patch PCA loading
         resize = args.stl_resize if args.dataset_name == "stl10" else 32
         H_p = W_p = resize // args.patch_size
@@ -238,26 +222,26 @@ def setup_pca(args, dataset):
             patch_size=args.patch_size,
             patch_specific=True,
             mean_grid=mean_grid,
-            std_grid=std_grid
-        )
+            std_grid=std_grid)
+
         return pca_augmentor, eigenvalues_grid
 
     
     if args.dataset_name == "cifar10":
-        #pca_matrix = torch.tensor(np.load("/cluster/home/kguera/SimCLR/outputs/imagenet32_cifar10_pc_matrix_flipped.npy"), dtype=torch.float32, device=args.device).T
-        #eigenvalues = torch.tensor(np.load("/cluster/home/kguera/SimCLR/outputs/imagenet32_cifar10_eigenvalues_ratio.npy"), dtype=torch.float32, device=args.device)
-
-
         pca_matrix = torch.tensor(np.load("/cluster/home/kguera/SimCLR/outputs/pc_matrix_ipca.npy"), dtype=torch.float32, device=args.device)
         eigenvalues = torch.tensor(np.load("/cluster/home/kguera/SimCLR/outputs/eigenvalues_ratio_ipca.npy"), dtype=torch.float32, device=args.device)
     else:
-        pca_matrix = torch.tensor(np.load("/cluster/home/kguera/SimCLR/outputs/imagenet32_cifar10_pc_matrix_flipped.npy"), dtype=torch.float32, device=args.device).T
-        eigenvalues = torch.tensor(np.load("/cluster/home/kguera/SimCLR/outputs/imagenet32_cifar10_eigenvalues_ratio.npy"), dtype=torch.float32, device=args.device)
-        """resize = str(args.stl_resize)
-        pca_matrix_path = f"/cluster/home/kguera/SimCLR/outputs/pc_matrix_ipca_stl_{resize}.npy"
-        eigenvalues_path = f"/cluster/home/kguera/SimCLR/outputs/eigenvalues_ratio_ipca_stl_{resize}.npy"
-        pca_matrix = torch.tensor(np.load(pca_matrix_path), dtype=torch.float32, device=args.device)
-        eigenvalues = torch.tensor(np.load(eigenvalues_path), dtype=torch.float32, device=args.device)"""
+        imagenet_basis = True
+
+        if imagenet_basis:
+            pca_matrix = torch.tensor(np.load("/cluster/home/kguera/SimCLR/outputs/imagenet32_cifar10_pc_matrix_flipped.npy"), dtype=torch.float32, device=args.device).T
+            eigenvalues = torch.tensor(np.load("/cluster/home/kguera/SimCLR/outputs/imagenet32_cifar10_eigenvalues_ratio.npy"), dtype=torch.float32, device=args.device)
+        else:
+            resize = str(args.stl_resize)
+            pca_matrix_path = f"/cluster/home/kguera/SimCLR/outputs/pc_matrix_ipca_stl_{resize}.npy"
+            eigenvalues_path = f"/cluster/home/kguera/SimCLR/outputs/eigenvalues_ratio_ipca_stl_{resize}.npy"
+            pca_matrix = torch.tensor(np.load(pca_matrix_path), dtype=torch.float32, device=args.device)
+            eigenvalues = torch.tensor(np.load(eigenvalues_path), dtype=torch.float32, device=args.device)
 
    
 
@@ -273,7 +257,7 @@ def setup_pca(args, dataset):
             img = transforms.ToTensor()(img)
         all_images.append(img.view(-1))
     all_images = torch.stack(all_images)
-    mean = all_images.mean(dim=0).to(args.device) # move mean, std to gpu
+    mean = all_images.mean(dim=0).to(args.device)
     std = all_images.std(dim=0).to(args.device)
 
     
@@ -336,11 +320,7 @@ def prepare_dataloaders(args, dataset, pca_augmentor, eigenvalues):
         val_size = len(full_dataset) - train_size
         train_dataset, val_dataset = random_split(full_dataset, [train_size, val_size])
 
-    """# light augmentations
-    extra_augmentations = transforms.Compose([
-        transforms.Resize((image_size, image_size)),
-        transforms.RandomResizedCrop(size=image_size, scale = (args.min_crop_scale, 1)),
-        transforms.ToTensor()])"""
+    
     extra_aug_list = []
     if not (args.dataset_name == 'stl10' and args.stl_resize == 96):
         extra_aug_list.append(transforms.Resize((image_size, image_size)))
@@ -360,12 +340,6 @@ def prepare_dataloaders(args, dataset, pca_augmentor, eigenvalues):
 
     if args.extra_transforms == 1: # apply a light version of augmentations
         if args.dataset_name == 'stl10':
-            """train_dataset.transform = transforms.Compose([
-                transforms.Resize((size, size)),
-                PCAPlusTransformWrapper(pca_augmentor=pca_augmentor,
-                eigenvalues=eigenvalues,
-                extra_augmentations=extra_augmentations,
-                n_views=args.n_views)])"""
 
             transform_list = []
             if args.stl_resize != 96:
@@ -385,10 +359,9 @@ def prepare_dataloaders(args, dataset, pca_augmentor, eigenvalues):
                 masking_method=args.masking_method,
                 patch_size=args.patch_size,
                 extra_augmentations=extra_augmentations,
-                n_views=args.n_views
-            )
+                n_views=args.n_views)
 
-    #train_dataset = DatasetWithIndex(train_dataset)
+    
     train_loader = DataLoader(train_dataset, batch_size=args.batch_size, shuffle=True,
                             num_workers=args.workers, drop_last=True, pin_memory = False)
 
@@ -405,10 +378,9 @@ def visualize_views(train_dataset, original_dataset, args):
 
     for i in range(15):
         img_views, label = train_dataset[i]
-        """img1, img2 = img_views[0].cpu(), img_views[1].cpu()"""
 
         img1, img2 = img_views[0], img_views[1]
-        # Reshape flattened images if necessary (e.g., for flattened image-space transformer)
+        
         if img1.ndim == 1:
             img1 = img1.view(3, 32, 32)
         if img2.ndim == 1:

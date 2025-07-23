@@ -50,13 +50,12 @@ pca_grid = [
 
 unfold = torch.nn.Unfold(kernel_size=args.patch_size, stride=args.patch_size)
 
-print("Fitting position-specific patch PCA…")
+
 for images, _ in loader:
-    # images: [B, C, H, W]
     B = images.size(0)
-    patches = unfold(images)            # [B, d, H_p*W_p]
-    patches = patches.permute(0, 2, 1)   # [B, H_p*W_p, d]
-    # for each spatial cell, collect the B patches and update its PCA
+    patches = unfold(images)
+    patches = patches.permute(0, 2, 1)   
+    
     for idx in range(H_p * W_p):
         i, j = divmod(idx, W_p)
         cell_patches = patches[:, idx, :].reshape(-1, d).numpy()
@@ -69,26 +68,22 @@ for i in range(H_p):
         base = f"pos_{i}_{j}_{args.dataset}_{args.resize}_{args.patch_size}"
         np.save(
             os.path.join(args.output_dir, f"patch_pc_matrix_{base}.npy"),
-            pca_grid[i][j].components_
-        )
+            pca_grid[i][j].components_)
         np.save(
             os.path.join(args.output_dir, f"patch_eigenvalues_{base}.npy"),
-            pca_grid[i][j].explained_variance_
-        )
+            pca_grid[i][j].explained_variance_)
         np.save(
             os.path.join(args.output_dir, f"patch_eigen_ratio_{base}.npy"),
-            pca_grid[i][j].explained_variance_ratio_
-        )
+            pca_grid[i][j].explained_variance_ratio_)
 
 
 for i in range(H_p):
     for j in range(W_p):
-        # patches for cell (i,j): shape [B, d]
         cell_patches = patches[:, idx, :].reshape(-1, d).numpy()
         
         # Compute mean & std on raw patches
-        mean_vec = cell_patches.mean(axis=0)           # [d]
-        std_vec  = cell_patches.std(axis=0) + 1e-8     # [d]
+        mean_vec = cell_patches.mean(axis=0)       
+        std_vec  = cell_patches.std(axis=0) + 1e-8    
         
         # Standardize for PCA
         cell_patches = (cell_patches - mean_vec) / std_vec
@@ -100,4 +95,4 @@ for i in range(H_p):
         np.save(os.path.join(args.output_dir, f"patch_mean_pos_{i}_{j}_{args.dataset}_{args.resize}_{args.patch_size}.npy"), mean_vec)
         np.save(os.path.join(args.output_dir, f"patch_std_pos_{i}_{j}_{args.dataset}_{args.resize}_{args.patch_size}.npy"), std_vec)
 
-print("Done. PCA files in", args.output_dir)
+

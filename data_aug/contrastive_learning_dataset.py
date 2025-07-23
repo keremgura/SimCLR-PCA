@@ -31,8 +31,7 @@ class ContrastiveLearningDataset:
     def get_dataset(self, name, n_views, pca_augmentor=None, eigenvalues=None, augmentations=True, extra_augmentations=False, split='train', train = True):
         dataset_paths = {
             'cifar10': f"{self.root_folder}/cifar10",
-            'stl10': f"{self.root_folder}/stl10"
-        }
+            'stl10': f"{self.root_folder}/stl10"}
 
         if name not in dataset_paths:
             raise ValueError(f"Dataset {name} is not supported!")
@@ -64,13 +63,11 @@ class ContrastiveLearningDataset:
             if extra_augmentations:
                 transform = transforms.Compose([
                     resize_transform,
-                    PCAPlusTransformWrapper(pca_augmentor, eigenvalues, self.masking_method, self.patch_size, extra_augmentations)
-                ])
+                    PCAPlusTransformWrapper(pca_augmentor, eigenvalues, self.masking_method, self.patch_size, extra_augmentations)])
             else:
                 transform = transforms.Compose([
                     resize_transform,
-                    PCAAugmentorWrapper(pca_augmentor, eigenvalues, self.masking_method, self.patch_size)
-                ])
+                    PCAAugmentorWrapper(pca_augmentor, eigenvalues, self.masking_method, self.patch_size)])
         
         ### 🧩 CASE 2: SimCLR augmentations
         elif augmentations:

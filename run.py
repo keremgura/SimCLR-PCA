@@ -7,7 +7,7 @@ from torch.utils.data import random_split
 from torchvision import models
 from data_aug.contrastive_learning_dataset import ContrastiveLearningDataset
 from data_aug.view_generator import ContrastiveLearningViewGenerator, PCAAugmentorWrapper, PCAPlusTransformWrapper
-from models.resnet_simclr import ResNetSimCLR, PCATransformerSimCLR, SimCLRViTModel, ViTSimCLR
+from models.resnet_simclr import ResNetSimCLR, ViTSimCLR
 from simclr import SimCLR
 from PCAAugmentorSimCLR import PCAAugmentor
 import matplotlib.pyplot as plt
@@ -112,6 +112,13 @@ mp.set_start_method('spawn', force=True)
 def main():
     args = parser.parse_args()
 
+    # Automatically set masking_method when patch PCA mode is requested
+    if getattr(args, "patch_pca_specific", False):
+        args.masking_method = "patch_specific"
+    elif getattr(args, "patch_pca_agnostic", False):
+        args.masking_method = "patch_agnostic"
+
+
     #wandb.init(project="simclr-pca", config=vars(args))
 
     assert args.n_views == 2, "Only two view training is supported. Please use --n-views 2."
@@ -183,29 +190,20 @@ def main():
 
     
     if args.vit:
-        """model = SimCLRViTModel(vit_model_name="vit_tiny_patch16_224", image_size=resize, patch_size=args.vit_patch_size, hidden_size = args.vit_hidden_size, layers= args.vit_layers,
-            heads=args.vit_heads,
-            intermediate_size=args.vit_intermediate_size or args.vit_hidden_size * 4,
-            simclr_embed_dim=args.out_dim,
-            freeze_patch_embed=True)"""
-
         model = ViTSimCLR(args)
     else:
         model = ResNetSimCLR(base_model=args.arch, out_dim=args.out_dim, dropout = args.dropout)
 
     optimizer = torch.optim.Adam(model.parameters(), args.lr, weight_decay=args.weight_decay)
-    #optimizer = torch.optim.AdamW(model.parameters(), args.lr, weight_decay=args.weight_decay)
-
+    
     #scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=len(train_loader), eta_min=0, last_epoch=-1)
-
     scheduler = LinearWarmupScheduler(
         optimizer=optimizer,
-        warmup_epochs=args.warmup_epochs,  # or whatever value you want (you could also make this an arg)
+        warmup_epochs=args.warmup_epochs,
         total_epochs=args.epochs,
         target_lr=args.lr)
 
 
-    #  It’s a no-op if the 'gpu_index' argument is a negative integer or None.
     with torch.cuda.device(args.gpu_index):
         simclr = SimCLR(model=model, optimizer=optimizer, scheduler=scheduler, args=args, pca_augmentor = pca_augmentor, eigenvalues = eigenvalues)
         simclr.train(train_loader, val_loader)

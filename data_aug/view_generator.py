@@ -36,7 +36,6 @@ class PCAAugmentorWrapper:
         Apply PCAAugmentor and return two PCA-masked views.
         """
         method = self.masking_method
-                # Treat "patch_agnostic" as standard stochastic patch-wise masking
         
         if method in ("patch_agnostic", "patch_specific"):
             img1, img2 = self.pca_augmentor.extract_views(img, self.eigenvalues)
@@ -68,10 +67,7 @@ class PCAAugmentorWrapper:
             img1, img2 = img1.squeeze(0), img2.squeeze(0)
 
         
-
-        
         return [img1, img2]
-        """return img""" # for batch extract views
         
         
 

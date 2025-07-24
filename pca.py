@@ -20,8 +20,6 @@ import torchvision.transforms as transforms
 
 random.seed(42)
 
-print("Library imports successful!")
-
 """
 Performs PCA on a subset of ImageNet images
 """
@@ -31,10 +29,7 @@ name="stl10"
 data_fn = torchvision.datasets.STL10
 folder = "./data/stl10"
 
-"""
-if not os.path.exists(os.path.join(folder, "cifar-10-batches-py")):
-    raise FileNotFoundError(f"CIFAR-10 dataset not found in {folder}. Ensure it is extracted properly.")
-"""
+
 
 # apply transformations to loaded images
 transform = transforms.Compose([
@@ -53,7 +48,7 @@ images_np, _ = next(data_iter) # image tensors
 images_np = images_np.numpy()
 pca_dim=500
 pca = PCA()  # You can adjust the number of components
-#pca = PCA(n_components = pca_dim)
+
 
 # Reshape the images to (num_samples, height * width * channels)
 num_samples = images_np.shape[0]
@@ -68,21 +63,11 @@ images_flat = (images_np - mean) / std
 pca.fit(images_flat)
 
 
-
 output_dir = os.path.expanduser("~/SimCLR/outputs")
 os.makedirs(output_dir, exist_ok=True)  # Ensure the directory exists
-
-print(output_dir, pca.components_.shape)
-
-#np.save(os.path.join(output_dir, "selected_indices.npy"), .numpy()) 
 
 # Save PCA results
 suffix = str(resize)
 np.save(os.path.join(output_dir, f"pc_matrix_ipca_stl_{suffix}.npy"), pca.components_)
 np.save(os.path.join(output_dir, f"eigenvalues_ipca_stl_{suffix}.npy"), pca.explained_variance_)
 np.save(os.path.join(output_dir, f"eigenvalues_ratio_ipca_stl_{suffix}.npy"), pca.explained_variance_ratio_)
-"""
-np.save(f'~/pc_matrix_ipca.npy',pca.components_) # pca transformation matrix (pca_dim, n_pixels)
-np.save(f'~/eigenvalues_ipca.npy',pca.explained_variance_) # eigenvalues, amount of var explained by each component
-np.save(f'~/eigenvalues_ratio_ipca.npy',pca.explained_variance_ratio_) # percentage of variance explained by each PCA component
-"""

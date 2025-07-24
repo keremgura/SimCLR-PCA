@@ -15,7 +15,6 @@ torch.manual_seed(0)
 
 
 class SimCLR(object):
-
     def __init__(self, *args,pca_augmentor = None, eigenvalues = None, **kwargs):
         self.args = kwargs['args']
         self.model = kwargs['model'].to(self.args.device)
@@ -25,15 +24,18 @@ class SimCLR(object):
         self.pca_augmentor = pca_augmentor
         self.eigenvalues = eigenvalues
 
+        self._setup_logging()
+
+        self.criterion = torch.nn.CrossEntropyLoss().to(self.args.device)
+
         self.classifier, self.classifier_optimizer, self.classifier_criterion = get_linear_classifier(
             out_dim=self.args.out_dim, device=self.args.device)
 
+    def _setup_logging(self):
         experiment_name = generate_experiment_name(self.args)
-
-        
-        self.writer = SummaryWriter(log_dir=os.path.join("runs", experiment_name))
-        logging.basicConfig(filename=os.path.join(self.writer.log_dir, 'training.log'), level=logging.DEBUG)
-        self.criterion = torch.nn.CrossEntropyLoss().to(self.args.device) # applied on contrastive learning logits
+        log_dir = os.path.join("runs", experiment_name)
+        self.writer = SummaryWriter(log_dir=log_dir)
+        logging.basicConfig(filename=os.path.join(log_dir, 'training.log'), level=logging.DEBUG)
 
     def info_nce_loss(self, features):
         labels = torch.cat([torch.arange(self.args.batch_size) for i in range(self.args.n_views)], dim=0)
@@ -50,12 +52,11 @@ class SimCLR(object):
 
         labels = labels[~mask].view(labels.shape[0], -1)
         similarity_matrix = similarity_matrix[~mask].view(similarity_matrix.shape[0], -1)
-        # assert similarity_matrix.shape == labels.shape
 
         # select and combine multiple positives
         positives = similarity_matrix[labels.bool()].view(labels.shape[0], -1)
 
-        # select only the negatives the negatives
+        # select only the negatives
         negatives = similarity_matrix[~labels.bool()].view(similarity_matrix.shape[0], -1)
 
         logits = torch.cat([positives, negatives], dim=1)
@@ -95,7 +96,6 @@ class SimCLR(object):
             total_top1 = 0.0
             total_samples = 0
             for images, _ in tqdm(train_loader):
-            #for images, _, indices in tqdm(train_loader):
                 start_time = time.time()
                 load_start = time.time()
 
@@ -106,17 +106,13 @@ class SimCLR(object):
 
                 torch.cuda.synchronize()
                 
-
                 with autocast(enabled=self.args.fp16_precision):
                     features = self.model(images) # forward pass through resnet
                     logits, labels = self.info_nce_loss(features) # compute contrastive loss
                     loss = self.criterion(logits, labels)
-
                 
                 self.optimizer.zero_grad()
-
                 scaler.scale(loss).backward()
-
                 scaler.step(self.optimizer)
                 scaler.update()
 
@@ -129,12 +125,9 @@ class SimCLR(object):
                 # Dynamically adjust logging interval: start frequent, reduce over time
                 log_interval = max(10, self.args.log_every_n_steps * (1 + epoch_counter // 5))
                 if n_iter % log_interval == 0:
-                #if n_iter % self.args.log_every_n_steps == 0:
-                    #top1, top5 = accuracy(logits, labels, topk=(1, 5))
                     self.writer.add_scalar('loss', loss, global_step=n_iter)
                     self.writer.add_scalar('acc/top1', top1[0], global_step=n_iter)
                     self.writer.add_scalar('acc/top5', top5[0], global_step=n_iter)
-                    #self.writer.add_scalar('learning_rate', self.scheduler.get_lr()[0], global_step=n_iter)
                     self.writer.add_scalar('Time/Batch', time.time() - start_time, global_step=n_iter)
                     
                 n_iter += 1
@@ -143,13 +136,10 @@ class SimCLR(object):
 
             avg_loss = total_loss / total_samples
             avg_top1 = total_top1 / total_samples
-            
-            
+                      
             logging.debug(f"Epoch: {epoch_counter}\tLoss: {avg_loss:.4f}\tTop1 accuracy: {avg_top1:.2f}")
             self.writer.add_scalar('train/epoch_loss', avg_loss, epoch_counter)
             self.writer.add_scalar('train/epoch_top1', avg_top1, epoch_counter)
-
-            
 
             if val_loader is not None:
                 val_contrastive_loss, val_cls_acc, val_top1_acc = self.validate(val_loader)
@@ -249,13 +239,7 @@ class SimCLR(object):
 
         self.model.eval()
 
-        if self.args.vit:
-            out_dim = self.args.vit_hidden_size
-        else:
-            if self.args.arch == "resnet18":
-                out_dim = 512
-            else:
-                out_dim = 2048
+        out_dim = self.args.vit_hidden_size if self.args.vit else (512 if self.args.arch == "resnet18" else 2048)
         
         classifier, optimizer, criterion = get_linear_classifier(
             out_dim=out_dim, device=self.args.device)
@@ -298,7 +282,6 @@ class SimCLR(object):
                 y_batch = y_batch.to(self.args.device)
 
                 with torch.no_grad():
-                    #features = self.model(x_batch)
                     features = self.model.get_features(x_batch)
                     logits = classifier(features)
                     top1, top5 = accuracy(logits, y_batch, topk=(1, 5))

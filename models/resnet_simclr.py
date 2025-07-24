@@ -9,14 +9,12 @@ from torch.nn import BatchNorm1d
 
 from exceptions.exceptions import InvalidBackboneError
 
-
 class ResNetSimCLR(nn.Module):
     def __init__(self, base_model, out_dim, dropout=0.0):
         super(ResNetSimCLR, self).__init__()
         self.resnet_dict = {
             "resnet18": models.resnet18(pretrained=False),
-            "resnet50": models.resnet50(pretrained=False)
-        }
+            "resnet50": models.resnet50(pretrained=False)}
 
         self.backbone = self._get_basemodel(base_model)
         dim_mlp = self.backbone.fc.in_features
@@ -27,8 +25,7 @@ class ResNetSimCLR(nn.Module):
             nn.Linear(dim_mlp, dim_mlp),
             nn.ReLU(),
             nn.Dropout(p=dropout),
-            nn.Linear(dim_mlp, out_dim)
-        )
+            nn.Linear(dim_mlp, out_dim))
 
     def _get_basemodel(self, model_name):
         if model_name not in self.resnet_dict:
@@ -43,7 +40,6 @@ class ResNetSimCLR(nn.Module):
     def get_features(self, x):
         h = self.backbone(x)
         return F.normalize(h, dim=1)
-
 
 class ViTSimCLR(nn.Module):
     def __init__(self, args, image_size=32):
@@ -67,8 +63,6 @@ class ViTSimCLR(nn.Module):
         self.vit = ViTModel(config)
         self.pooling = args.vit_pooling  # 'cls' or 'mean'
 
-        
-
         mlp_input_dim = hidden_size
 
         # build projection MLP dynamically
@@ -91,8 +85,7 @@ class ViTSimCLR(nn.Module):
 
     def forward(self, x):
         features = self.get_features(x)
-        z = self.projector(features)
-        
+        z = self.projector(features)      
         return F.normalize(z, dim=1)
 
     def get_features(self, x):

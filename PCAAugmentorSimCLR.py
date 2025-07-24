@@ -11,10 +11,8 @@ class PCAAugmentor:
                  normalize=True, drop_ratio=0, drop_strategy="random",
                  double=False, interpolate=False, pad_strategy="pad",
                  mean=None, std=None):
-        
-        
-            
-        self.pca_ratio = pca_ratio  # How much variance to retain
+                 
+        self.pca_ratio = pca_ratio
         self.device = device
         self.img_size = img_size
         
@@ -25,15 +23,11 @@ class PCAAugmentor:
         if self.patch_specific:
             self.pca_matrix_grid = masking_fn_
             self.mean_grid = mean_grid
-            self.std_grid  = std_grid
+            self.std_grid = std_grid
         else:
             self.masking_fn_ = masking_fn_.to(device)
 
-        if self.use_patch:
-            self.patch_dim = 3 * patch_size * patch_size
-            self.num_pixels = self.patch_dim
-        else:
-            self.num_pixels = img_size * img_size * 3
+        self.num_pixels = 3 * patch_size * patch_size if self.use_patch else img_size * img_size * 3
         self.normalize = normalize
         self.global_min = global_min
         self.global_max = global_max
@@ -45,22 +39,20 @@ class PCAAugmentor:
         self.interpolate = interpolate
         self.pad_strategy = pad_strategy
         self.precomputed_masks = None
-
         
         self.mean = torch.tensor(mean, dtype=torch.float32, device=device) if mean is not None else None
         self.std = torch.tensor(std, dtype=torch.float32, device=device) if std is not None else None
-        
 
         self.to_tensor = transforms.ToTensor()
 
     def compute_pc_mask(self, eigenvalues, drop_ratio=None):
-        double_shuffle = self.double
         m = self.pca_ratio
         d = self.drop_ratio if drop_ratio is None else drop_ratio
 
 
         eigenvalues = eigenvalues.to(self.device)
         total_variance = eigenvalues.sum()
+        double_shuffle = self.double
 
         def sample_view_mask(strategy, drop_ratio, retain_ratio):
             sorted_indices = torch.argsort(eigenvalues, descending=True)
@@ -69,12 +61,8 @@ class PCAAugmentor:
 
             if strategy == "low":
                 threshold_mask = cumsum < (1 - drop_ratio) * total_variance
-                # Always include at least one component
-                if not torch.any(threshold_mask):
-                    selected = sorted_indices
-                else:
-                    last_keep = torch.nonzero(threshold_mask, as_tuple=False)[-1].item()
-                    selected = sorted_indices[: last_keep + 1]
+
+                selected = sorted_indices[: torch.nonzero(threshold_mask, as_tuple=False)[-1].item() + 1] if torch.any(threshold_mask) else sorted_indices
 
                 
 
@@ -85,10 +73,7 @@ class PCAAugmentor:
                 start_idx = torch.searchsorted(cumsum, torch.tensor(drop_lower, device=self.device))
                 end_idx = torch.searchsorted(cumsum, torch.tensor(drop_upper, device=self.device))
                 
-                selected = torch.cat([sorted_indices[:start_idx], sorted_indices[end_idx:]])
-
-                if len(selected) == 0 or end_idx <= start_idx:
-                    selected = sorted_indices
+                selected = torch.cat([sorted_indices[:start_idx], sorted_indices[end_idx:]]) if end_idx > start_idx else sorted_indices
 
             else:  # "random"
                 index = torch.randperm(len(eigenvalues), device=self.device)
@@ -101,8 +86,6 @@ class PCAAugmentor:
                 retain_thresh = torch.argmin(torch.abs(cumsum_after_drop - m * (1 - d)))
 
                 selected = index[drop_cutoff:drop_cutoff + retain_thresh]
-                
-
             
             return selected.clone().detach().long().to(self.device)
 
@@ -110,12 +93,14 @@ class PCAAugmentor:
         # Apply slight randomization to drop and retain ratios for both input and target
         drop_randomize = 0.1 if d > 0 else 0
         mask_randomize = 0.1
-        
 
-        drop_input = d + (torch.rand(1, device=self.device).item() * 2 * drop_randomize - drop_randomize)
-        retain_input = m + (torch.rand(1, device=self.device).item() * 2 * mask_randomize - mask_randomize)
-        drop_target = d + (torch.rand(1, device=self.device).item() * 2 * drop_randomize - drop_randomize)
-        retain_target = m + (torch.rand(1, device=self.device).item() * 2 * mask_randomize - mask_randomize)
+        def randomized(r, eps):
+            return r + (torch.rand(1, device=self.device).item() * 2 * eps - eps)
+
+        drop_input = randomized(d, drop_randomize)
+        retain_input = randomized(m, mask_randomize)
+        drop_target = randomized(d, drop_randomize)
+        retain_target = randomized(m, mask_randomize)
 
         # Weighted randomization of drop_strategy per call if requested
         if self.drop_strategy == "arbitrary":
@@ -141,13 +126,12 @@ class PCAAugmentor:
 
             
         else:
-            # Use a shared retained set, then split into disjoint parts
             base_mask = sample_view_mask(selected_strategy_input, d, 1.0)
             if self.shuffle:
                 base_mask = base_mask[torch.randperm(base_mask.shape[0])]
             split_idx = int(m * base_mask.shape[0])
-            pc_mask_input = base_mask[:split_idx]
-            pc_mask_target = base_mask[split_idx:]
+            
+            pc_mask_input, pc_mask_target = base_mask[:split_idx], base_mask[split_idx:]
 
 
         return pc_mask_input, pc_mask_target

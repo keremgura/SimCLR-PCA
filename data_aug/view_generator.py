@@ -28,8 +28,7 @@ class PCAAugmentorWrapper:
         self.pca_augmentor = pca_augmentor
         self.eigenvalues = eigenvalues
         self.masking_method = masking_method
-        self.patch_size = patch_size
-        
+        self.patch_size = patch_size   
 
     def __call__(self, img):
         """
@@ -66,11 +65,7 @@ class PCAAugmentorWrapper:
         if img1.dim() == 2:
             img1, img2 = img1.squeeze(0), img2.squeeze(0)
 
-        
         return [img1, img2]
-        
-        
-
 
 class PCAPlusTransformWrapper:
     def __init__(self, pca_augmentor, eigenvalues, masking_method, patch_size, extra_augmentations, n_views=2):
@@ -103,7 +98,6 @@ class PCAPlusTransformWrapper:
                 view2 = TF.to_tensor(view2)
 
             return [view1, view2]
-        
         
         if method == "global":
             view1, view2 = self.pca_augmentor.extract_views(img, self.eigenvalues)

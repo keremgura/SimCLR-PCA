@@ -79,30 +79,30 @@ parser.add_argument("--extra_transforms", default = 0, type = int, choices = [2,
 parser.add_argument('--dropout', type=float, default=0.05,
                     help='Dropout rate to apply in the projection head. Set to 0.0 to disable.')
 parser.add_argument('--validation_size', default = 0.1, type = float)
-parser.add_argument('--drop_pc_ratio', default = 0, type = float, help = 'ratio of variance explained to be dropped')
 parser.add_argument('--shuffle', action='store_true', help='Enable PCA component shuffling')
+parser.add_argument('--drop_pc_ratio', default = 0, type = float, help = 'ratio of variance explained to be dropped')
 parser.add_argument("--drop_strategy", default = "random", choices = ["random", "low", "middle", "arbitrary"], help = "determines which principal components are dropped")
-parser.add_argument('--vit', action='store_true', help = 'whether a vision transformer is used')
-parser.add_argument('--min_crop_scale', default = 0.6, type = float, help = 'minimum scale for cropping')
+parser.add_argument('--vit', action='store_true', help = 'whether a vision transformer is used instead of the ResNet')
+parser.add_argument('--min_crop_scale', default = 0.6, type = float, help = 'minimum scale for cropping if extra transformations are used')
 parser.add_argument('--double', action='store_true', help = 'enables double shuffling')
 parser.add_argument('--interpolate', action='store_true', help = 'enables interpolating')
 parser.add_argument('--pad_strategy', default = "random", choices = ["hybrid", "pad", "mean", "gaussian", "random"])
-parser.add_argument('--stl_resize', default = 32, type = int)
-parser.add_argument('--masking_method', default = "global", choices = ["global", "stochastic", "cyclical", "auto", "combined", "patch_agnostic", "patch_specific"])
+parser.add_argument('--stl_resize', default = 32, type = int, help = "Resizing applied to stl10 image data")
+parser.add_argument('--masking_method', default = "global", choices = ["global", "stochastic", "cyclical", "auto", "combined", "patch_agnostic", "patch_specific"], help = "method of masking to use while generating pca-based augmentations")
 parser.add_argument("--base_fractions", type=float, nargs=2, default=[0.1, 0.3], help="Two base fractions for cyclic PCA masking shift per view")
-parser.add_argument("--patch_size", default = 8, type = int)
-parser.add_argument('--patch_pca_agnostic', action='store_true')
-parser.add_argument('--patch_pca_specific', action = 'store_true')
+parser.add_argument("--patch_size", default = 8, type = int, help = "patch size in 2D or patchified masking")
+parser.add_argument('--patch_pca_agnostic', action='store_true', help = "whether to use position-agnostic patchified pca")
+parser.add_argument('--patch_pca_specific', action = 'store_true', help = "whether to use position-sepcific patchified pca")
 
-parser.add_argument("--warmup_epochs", default = 10, type = int)
+parser.add_argument("--warmup_epochs", default = 10, type = int, help = "number of warmup epochs for the linear warmup scheduler")
 
 #ViT parameters
-parser.add_argument('--vit_patch_size', type=int, default=8, help='ViT patch size (e.g., 4 or 8)') # try it
-parser.add_argument('--vit_hidden_size', type=int, default=256, help='ViT hidden size') # only increase makes it worse
-parser.add_argument('--vit_layers', type=int, default=8, help='Number of transformer layers in ViT') # looks problematic to increase above 8, try 6 and 8
-parser.add_argument('--vit_heads', type=int, default=4, help='Number of attention heads in ViT') # remain same, must divide hidden size
+parser.add_argument('--vit_patch_size', type=int, default=8, help='ViT patch size (e.g., 4 or 8)')
+parser.add_argument('--vit_hidden_size', type=int, default=256, help='ViT hidden size')
+parser.add_argument('--vit_layers', type=int, default=8, help='Number of transformer layers in ViT')
+parser.add_argument('--vit_heads', type=int, default=4, help='Number of attention heads in ViT')
 parser.add_argument('--vit_intermediate_size', type=int, default=None, help='Optional intermediate size (defaults to 4x hidden size if None)')
-parser.add_argument('--vit_pooling', type=str, choices=['cls', 'mean', 'both'], default='both', help='Pooling strategy: CLS token or mean of patch tokens') # try both
+parser.add_argument('--vit_pooling', type=str, choices=['cls', 'mean', 'both'], default='both', help='Pooling strategy: CLS token or mean of patch tokens')
 parser.add_argument('--proj_hidden_dim', type=int, default=512, help='ViT projector hidden dim')
 parser.add_argument('--proj_num_layers', type=int, default=2)
 
@@ -112,14 +112,11 @@ mp.set_start_method('spawn', force=True)
 def main():
     args = parser.parse_args()
 
-    # Automatically set masking_method when patch PCA mode is requested
+    
     if getattr(args, "patch_pca_specific", False):
         args.masking_method = "patch_specific"
     elif getattr(args, "patch_pca_agnostic", False):
         args.masking_method = "patch_agnostic"
-
-
-    #wandb.init(project="simclr-pca", config=vars(args))
 
     assert args.n_views == 2, "Only two view training is supported. Please use --n-views 2."
     # check if gpu training is available
@@ -131,7 +128,6 @@ def main():
     else:
         args.device = torch.device('cpu')
         args.gpu_index = -1
-
 
     
     # Data & augmentor setup
@@ -174,12 +170,8 @@ def main():
     # Visualize a few samples for sanity checking
     visualize_views(train_dataset, visualization_base_dataset, args)
 
-    
 
     resize = args.stl_resize if args.dataset_name == "stl10" else 32
-    
-    
-
     transform_list = []
     if not (args.dataset_name == "stl10" and args.stl_resize == 96):
         transform_list.append(transforms.Resize((resize, resize)))

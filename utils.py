@@ -1,13 +1,12 @@
 import os
 import numpy as np
 import shutil
-
 import torch
 import yaml
 from datetime import datetime
 from data_aug.contrastive_learning_dataset import ContrastiveLearningDataset
 from data_aug.view_generator import ContrastiveLearningViewGenerator, PCAAugmentorWrapper, PCAPlusTransformWrapper
-from models.resnet_simclr import ResNetSimCLR, SimCLRViTModel
+from models.resnet_simclr import ResNetSimCLR
 from PCAAugmentorSimCLR import PCAAugmentor
 from data_aug.gaussian_blur import GaussianBlur
 import matplotlib.pyplot as plt
@@ -110,13 +109,11 @@ def generate_experiment_name(args, prefix="simclr"):
         timestamp,
         vit_flag]
 
-    # Filter out empty strings (e.g., when double or vit is not active)
+    
     experiment_name = "_".join(filter(None, parts))
     return experiment_name
     
-    
 
-# function to compute the minimum and maximum considering every image
 def compute_dataset_min_max(dataset):
     """Compute global min and max pixel values across dataset for normalization."""
     global_min, global_max = float('inf'), float('-inf')
@@ -140,7 +137,6 @@ def setup_pca(args, dataset):
     if args.pca != 1:
         return None, None
     if args.patch_pca_agnostic:
-        # Determine resize based on dataset
         resize_str = str(args.stl_resize) if args.dataset_name == "stl10" else "32"
         # Base directory where patch PCA files are saved
         patch_dir = os.path.join(os.path.dirname(__file__), "outputs", "patch_pca")
@@ -231,7 +227,7 @@ def setup_pca(args, dataset):
         pca_matrix = torch.tensor(np.load("/cluster/home/kguera/SimCLR/outputs/pc_matrix_ipca.npy"), dtype=torch.float32, device=args.device)
         eigenvalues = torch.tensor(np.load("/cluster/home/kguera/SimCLR/outputs/eigenvalues_ratio_ipca.npy"), dtype=torch.float32, device=args.device)
     else:
-        imagenet_basis = True
+        imagenet_basis = True # select use of basis
 
         if imagenet_basis:
             pca_matrix = torch.tensor(np.load("/cluster/home/kguera/SimCLR/outputs/imagenet32_cifar10_pc_matrix_flipped.npy"), dtype=torch.float32, device=args.device).T
@@ -272,16 +268,6 @@ def setup_pca(args, dataset):
     return pca_augmentor, eigenvalues
 
 
-class DatasetWithIndex(torch.utils.data.Dataset):
-    def __init__(self, dataset):
-        self.dataset = dataset
-
-    def __getitem__(self, index):
-        data, label = self.dataset[index]
-        return data, label, index
-
-    def __len__(self):
-        return len(self.dataset)
 
 def prepare_dataloaders(args, dataset, pca_augmentor, eigenvalues):
     image_size = args.stl_resize if args.dataset_name == 'stl10' else 32
@@ -328,7 +314,6 @@ def prepare_dataloaders(args, dataset, pca_augmentor, eigenvalues):
     extra_aug_list.append(transforms.ToTensor())
     extra_augmentations = transforms.Compose(extra_aug_list)
 
-    s = 1
     size = args.stl_resize if args.dataset_name == 'stl10' else 32
     
     if pca_augmentor and args.extra_transforms == 0 and args.vit:
@@ -401,7 +386,7 @@ def visualize_views(train_dataset, original_dataset, args):
         plt.savefig(os.path.join(save_folder, f"sample_{i}.png"))
         plt.close(fig)
 
-    print(f"[✓] Visualizations saved to: {save_folder}")
+    print(f"Visualizations saved to: {save_folder}")
 
 class LinearWarmupScheduler:
     def __init__(self, optimizer, warmup_epochs, total_epochs, target_lr):

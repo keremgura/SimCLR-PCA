@@ -49,14 +49,8 @@ class ContrastiveLearningDataset:
         else:
             raise ValueError(f"Dataset {name} is not supported!")
 
-        ### 🛠️ ADD A RESIZE TRANSFORM FIRST
-        if name == 'stl10' and self.resize != 96:
-            resize_transform = transforms.Resize((self.resize, self.resize))
-            
-        else:
-            resize_transform = IdentityTransform()  # no-op
 
-       
+        resize_transform = transforms.Resize((self.resize, self.resize)) if name == 'stl10' and self.resize != 96 else IdentityTransform()
 
         ### 🧩 CASE 1: PCA augmentor
         if pca_augmentor is not None and eigenvalues is not None:
@@ -73,13 +67,9 @@ class ContrastiveLearningDataset:
         elif augmentations:
             transform = transforms.Compose([
                 resize_transform,
-                ContrastiveLearningViewGenerator(self.get_simclr_pipeline_transform(size=self.resize if img_size == 96 else 32), n_views)
-            ])
-
+                ContrastiveLearningViewGenerator(self.get_simclr_pipeline_transform(size=self.resize if img_size == 96 else 32), n_views)])
         ### 🧩 CASE 3: No augmentations
         else:
             transform = resize_transform
-
-        
 
         return dataset_class(dataset_root, transform=transform, download=False, **dataset_kwargs)

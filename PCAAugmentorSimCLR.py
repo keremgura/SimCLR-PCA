@@ -59,6 +59,8 @@ class PCAAugmentor:
             sorted_eigvals = eigenvalues[sorted_indices]
             cumsum = torch.cumsum(sorted_eigvals, dim=0)
 
+            rel_cumsum = cumsum / total_variance
+
             if strategy == "low":
                 threshold_mask = cumsum < (1 - drop_ratio) * total_variance
 
@@ -76,8 +78,12 @@ class PCAAugmentor:
                 selected = torch.cat([sorted_indices[:start_idx], sorted_indices[end_idx:]]) if end_idx > start_idx else sorted_indices
 
             else:  # "random"
-                index = torch.randperm(len(eigenvalues), device=self.device)
-                eigvals_shuffled = eigenvalues[index]
+                if self.shuffle:
+                    index = torch.randperm(len(eigenvalues), device=self.device)
+                    eigvals_shuffled = eigenvalues[index]
+                else:
+                    index = torch.arange(len(eigenvalues), device=self.device)
+                    eigvals_shuffled = eigenvalues
                 cumsum = torch.cumsum(eigvals_shuffled, dim=0)
 
                 drop_cutoff = torch.argmin(torch.abs(cumsum - d))

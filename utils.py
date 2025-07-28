@@ -109,6 +109,14 @@ def generate_experiment_name(args, prefix="simclr"):
         timestamp,
         vit_flag]
 
+    if getattr(args, "pca", 0) == 0:
+        parts = [prefix, dataset, pca_flag, temp, lr, wd]
+        parts.append(f"jitter{args.color_jitter_prob}")
+        parts.append(f"gray{args.gray_scale_prob}")
+        parts.append(f"crop{args.min_crop_scale_spatial}")
+        parts.append(timestamp)
+
+
     
     experiment_name = "_".join(filter(None, parts))
     return experiment_name

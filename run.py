@@ -72,7 +72,7 @@ parser.add_argument('--temperature', default=0.07, type=float,
 parser.add_argument('--n-views', default=2, type=int, metavar='N',
                     help='Number of views for contrastive learning training.')
 parser.add_argument('--gpu-index', default=0, type=int, help='Gpu index.')
-parser.add_argument("--pca_ratio", default = 0.6, type = float, help = "pca masking ratio")
+parser.add_argument("--pca_ratio", default = 0.9, type = float, help = "pca masking ratio")
 parser.add_argument("--global_scaling", default = 0, type = int, choices = [1, 0], help = "whether scaling of images are done image-based (0) or based on the min / max of the whole batch (1)")
 parser.add_argument("--pca", default = 1, type = int, choices = [1, 0], help = "1 if pca is applied in the augmentations")
 parser.add_argument("--extra_transforms", default = 0, type = int, choices = [2, 1, 0], help = '2: all simclr augmentations, 1: only cropping and flipping, 0: no extra augmentations')
@@ -95,6 +95,11 @@ parser.add_argument('--patch_pca_agnostic', action='store_true', help = "whether
 parser.add_argument('--patch_pca_specific', action = 'store_true', help = "whether to use position-sepcific patchified pca")
 
 parser.add_argument("--warmup_epochs", default = 10, type = int, help = "number of warmup epochs for the linear warmup scheduler")
+
+parser.add_argument('--min_crop_scale_spatial', default = 0.08, type = float, help = 'minimum scale for cropping if extra transformations are used')
+parser.add_argument("--color_jitter_prob", default = 0.8, type = float)
+parser.add_argument("--gray_scale_prob", default = 0.2, type = float)
+
 
 #ViT parameters
 parser.add_argument('--vit_patch_size', type=int, default=8, help='ViT patch size (e.g., 4 or 8)')
@@ -131,7 +136,7 @@ def main():
 
     
     # Data & augmentor setup
-    dataset = ContrastiveLearningDataset(args.data, args.stl_resize, args.masking_method, args.patch_size)
+    dataset = ContrastiveLearningDataset(args)
     pca_augmentor, eigenvalues = setup_pca(args, dataset)
 
     

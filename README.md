@@ -1,6 +1,6 @@
 # SimCLR in PCA
 
-![Image of SimCLR Arch](https://sthalles.github.io/assets/contrastive-self-supervised/cover.png)
+![SimCLR-PCA Pipeline](model.png)
 
 
 ## Files

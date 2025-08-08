@@ -14,11 +14,11 @@ parser.add_argument('--dataset', choices=['stl10','cifar10'], default='cifar10',
                     help="Which dataset to use")
 parser.add_argument('--resize',    type=int, default=32,
                     help="Image side length after resize")
-parser.add_argument('--patch_size',type=int, default=8,
+parser.add_argument('--patch_size',type=int, default=16,
                     help="Patch height & width")
 parser.add_argument('--n_components', type=int, default=100,
                     help="Number of PCA components per patch")
-parser.add_argument('--batch_size',   type=int, default=256,
+parser.add_argument('--batch_size',   type=int, default=1024,
                     help="Loader batch size")
 parser.add_argument('--output_dir',   type=str,
                     default=os.path.expanduser('~/SimCLR/outputs/patch_pca_pos'),
@@ -42,7 +42,7 @@ loader = DataLoader(ds, batch_size=args.batch_size, shuffle=False, num_workers=4
 
 # —– Prepare PCA grid —–
 H_p = W_p = args.resize // args.patch_size
-d     = 3 * args.patch_size * args.patch_size
+d  = 3 * args.patch_size * args.patch_size
 pca_grid = [
     [IncrementalPCA(n_components=d) for _ in range(W_p)]
     for _ in range(H_p)

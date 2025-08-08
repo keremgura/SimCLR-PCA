@@ -235,15 +235,17 @@ def setup_pca(args, dataset):
         pca_matrix = torch.tensor(np.load("/cluster/home/kguera/SimCLR/outputs/pc_matrix_ipca.npy"), dtype=torch.float32, device=args.device)
         eigenvalues = torch.tensor(np.load("/cluster/home/kguera/SimCLR/outputs/eigenvalues_ratio_ipca.npy"), dtype=torch.float32, device=args.device)
     else:
-        imagenet_basis = True # select use of basis
+        imagenet_basis = False # select use of basis
 
         if imagenet_basis:
             pca_matrix = torch.tensor(np.load("/cluster/home/kguera/SimCLR/outputs/imagenet32_cifar10_pc_matrix_flipped.npy"), dtype=torch.float32, device=args.device).T
             eigenvalues = torch.tensor(np.load("/cluster/home/kguera/SimCLR/outputs/imagenet32_cifar10_eigenvalues_ratio.npy"), dtype=torch.float32, device=args.device)
         else:
-            resize = str(args.stl_resize)
-            pca_matrix_path = f"/cluster/home/kguera/SimCLR/outputs/pc_matrix_ipca_stl_{resize}.npy"
-            eigenvalues_path = f"/cluster/home/kguera/SimCLR/outputs/eigenvalues_ratio_ipca_stl_{resize}.npy"
+            resize = str(args.stl_resize) if args.dataset_name == "stl10" else "32"
+            suffix = "stl" if args.dataset_name == "stl10" else "tinyimagenet"
+            pca_matrix_path = f"/cluster/home/kguera/SimCLR/outputs/pc_matrix_ipca_{suffix}_{resize}.npy"
+            eigenvalues_path = f"/cluster/home/kguera/SimCLR/outputs/eigenvalues_ratio_ipca_{suffix}_{resize}.npy"
+
             pca_matrix = torch.tensor(np.load(pca_matrix_path), dtype=torch.float32, device=args.device)
             eigenvalues = torch.tensor(np.load(eigenvalues_path), dtype=torch.float32, device=args.device)
 
@@ -299,7 +301,25 @@ def prepare_dataloaders(args, dataset, pca_augmentor, eigenvalues):
             augmentations=True,
             extra_augmentations=False,
             split='train')
-
+    elif args.dataset_name == 'tinyimagenet':
+        train_dataset = dataset.get_dataset(
+            name='tinyimagenet',
+            n_views=args.n_views,
+            pca_augmentor=pca_augmentor,
+            eigenvalues=eigenvalues,
+            augmentations=True,
+            extra_augmentations=False,
+            split='train',
+            train=True)
+        val_dataset = dataset.get_dataset(
+            name='tinyimagenet',
+            n_views=args.n_views,
+            pca_augmentor=pca_augmentor,
+            eigenvalues=eigenvalues,
+            augmentations=True,
+            extra_augmentations=False,
+            split='val',
+            train=False)
     else:
         full_dataset = dataset.get_dataset(
             args.dataset_name,
@@ -325,7 +345,9 @@ def prepare_dataloaders(args, dataset, pca_augmentor, eigenvalues):
     size = args.stl_resize if args.dataset_name == 'stl10' else 32
     
     if pca_augmentor and args.extra_transforms == 0 and args.vit:
-        train_dataset.dataset.transform = PCAAugmentorWrapper(
+        #train_dataset.dataset.transform = PCAAugmentorWrapper(
+        target = train_dataset.dataset if hasattr(train_dataset, 'dataset') else train_dataset
+        target.transform = PCAAugmentorWrapper(
             pca_augmentor=pca_augmentor,
             eigenvalues=eigenvalues,
             masking_method=args.masking_method,
@@ -346,7 +368,8 @@ def prepare_dataloaders(args, dataset, pca_augmentor, eigenvalues):
             train_dataset.transform = transforms.Compose(transform_list)
             
         else:
-            train_dataset.dataset.transform = PCAPlusTransformWrapper(
+            target = train_dataset.dataset if hasattr(train_dataset, 'dataset') else train_dataset
+            target.transform = PCAPlusTransformWrapper(
                 pca_augmentor=pca_augmentor,
                 eigenvalues=eigenvalues,
                 masking_method=args.masking_method,

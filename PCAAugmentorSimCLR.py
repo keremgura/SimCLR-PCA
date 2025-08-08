@@ -192,11 +192,11 @@ class PCAAugmentor:
             recon_in, recon_tg = [], []
             for idx in range(H_p * W_p):
                 i, j = divmod(idx, W_p)
-                Pmat = self.pca_matrix_grid[i][j].T
-                eigs = eigenvalues[i][j]
+                Pmat = self.pca_matrix_grid[i][j].T.to(P.dtype)
+                eigs = eigenvalues[i][j].to(P.dtype)
                 
-                mean_v = self.mean_grid[i][j].unsqueeze(0)
-                std_v = self.std_grid[i][j].unsqueeze(0)
+                mean_v = self.mean_grid[i][j].unsqueeze(0).to(P.dtype)
+                std_v = self.std_grid[i][j].unsqueeze(0).to(P.dtype)
                 pv = (P[idx:idx + 1] - mean_v) / std_v        
 
                 pc_in, pc_tg = self.compute_pc_mask(eigs)
@@ -305,7 +305,7 @@ class PCAAugmentor:
         img = img.to(self.device)
         img_flat = img.view(-1)
 
-        mask_randomize = 0.2
+        mask_randomize = 0.1
         
         def apply_patchwise_masking():
             C, H, W = img.shape
@@ -411,7 +411,7 @@ class PCAAugmentor:
             patches = []
             for i in range(0, H, patch_size):
                 for j in range(0, W, patch_size):
-                    mask_randomize = 0.2
+                    mask_randomize = 0.1
                     variance_ratio = self.pca_ratio + np.random.uniform(-mask_randomize, mask_randomize)
                     
                     

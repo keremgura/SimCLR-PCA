@@ -34,7 +34,7 @@ parser = argparse.ArgumentParser(description='PyTorch SimCLR')
 parser.add_argument('-data', metavar='DIR', default='./data',
                     help='path to dataset')
 parser.add_argument('--dataset_name', default='cifar10',
-                    help='dataset name', choices=['stl10', 'cifar10'])
+                    help='dataset name', choices=['stl10', 'cifar10', 'tiny_imagenet'])
 parser.add_argument('-a', '--arch', metavar='ARCH', default='resnet18',
                     choices=model_names,
                     help='model architecture: ' +
@@ -42,7 +42,7 @@ parser.add_argument('-a', '--arch', metavar='ARCH', default='resnet18',
                          ' (default: resnet18)')
 parser.add_argument('-j', '--workers', default=0, type=int, metavar='N', # 12 normally
                     help='number of data loading workers (default: 32)')
-parser.add_argument('--epochs', default=100, type=int, metavar='N',
+parser.add_argument('--epochs', default=200, type=int, metavar='N',
                     help='number of total epochs to run')
 parser.add_argument('-b', '--batch_size', default=256, type=int,
                     metavar='N',
@@ -72,7 +72,7 @@ parser.add_argument('--temperature', default=0.07, type=float,
 parser.add_argument('--n-views', default=2, type=int, metavar='N',
                     help='Number of views for contrastive learning training.')
 parser.add_argument('--gpu-index', default=0, type=int, help='Gpu index.')
-parser.add_argument("--pca_ratio", default = 0.6, type = float, help = "pca masking ratio")
+parser.add_argument("--pca_ratio", default = 0.7, type = float, help = "pca masking ratio")
 parser.add_argument("--global_scaling", default = 0, type = int, choices = [1, 0], help = "whether scaling of images are done image-based (0) or based on the min / max of the whole batch (1)")
 parser.add_argument("--pca", default = 1, type = int, choices = [1, 0], help = "1 if pca is applied in the augmentations")
 parser.add_argument("--extra_transforms", default = 0, type = int, choices = [2, 1, 0], help = '2: all simclr augmentations, 1: only cropping and flipping, 0: no extra augmentations')
@@ -90,7 +90,7 @@ parser.add_argument('--pad_strategy', default = "random", choices = ["hybrid", "
 parser.add_argument('--stl_resize', default = 32, type = int, help = "Resizing applied to stl10 image data")
 parser.add_argument('--masking_method', default = "global", choices = ["global", "stochastic", "cyclical", "auto", "combined", "patch_agnostic", "patch_specific"], help = "method of masking to use while generating pca-based augmentations")
 parser.add_argument("--base_fractions", type=float, nargs=2, default=[0.1, 0.3], help="Two base fractions for cyclic PCA masking shift per view")
-parser.add_argument("--patch_size", default = 8, type = int, help = "patch size in 2D or patchified masking")
+parser.add_argument("--patch_size", default = 16, type = int, help = "patch size in 2D or patchified masking")
 parser.add_argument('--patch_pca_agnostic', action='store_true', help = "whether to use position-agnostic patchified pca")
 parser.add_argument('--patch_pca_specific', action = 'store_true', help = "whether to use position-sepcific patchified pca")
 
@@ -176,10 +176,10 @@ def main():
     visualize_views(train_dataset, visualization_base_dataset, args)
 
 
-    resize = args.stl_resize if args.dataset_name == "stl10" else 32
+    resize = args.stl_resize if args.dataset_name != "cifar10" else 32
     transform_list = []
-    if not (args.dataset_name == "stl10" and args.stl_resize == 96):
-        transform_list.append(transforms.Resize((resize, resize)))
+    
+    transform_list.append(transforms.Resize((resize, resize)))
     transform_list.append(transforms.ToTensor())
 
     probe_train_dataset.transform = transforms.Compose(transform_list)

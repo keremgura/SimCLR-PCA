@@ -30,7 +30,8 @@ class ContrastiveLearningDataset:
     def get_dataset(self, name, n_views, pca_augmentor=None, eigenvalues=None, augmentations=True, extra_augmentations=False, split='train', train = True):
         dataset_paths = {
             'cifar10': f"{self.args.data}/cifar10",
-            'stl10': f"{self.args.data}/stl10"}
+            'stl10': f"{self.args.data}/stl10",
+            'tinyimagenet': f"{self.args.data}/tiny-imagenet-200"}
 
         if name not in dataset_paths:
             raise ValueError(f"Dataset {name} is not supported!")
@@ -45,11 +46,15 @@ class ContrastiveLearningDataset:
             dataset_class = datasets.STL10
             dataset_kwargs = {'split': split}
             img_size = 96
+        elif name == 'tinyimagenet':
+            dataset_class = None  # handled below with ImageFolder / TinyImageNetValDataset
+            dataset_kwargs = {}
+            img_size = 32
         else:
             raise ValueError(f"Dataset {name} is not supported!")
 
 
-        resize_transform = transforms.Resize((self.args.stl_resize, self.args.stl_resize)) if name == 'stl10' and self.args.stl_resize != 96 else IdentityTransform()
+        resize_transform = transforms.Resize((self.args.stl_resize, self.args.stl_resize)) if name != 'cifar10' else IdentityTransform()
 
         ### 🧩 CASE 1: PCA augmentor
         if pca_augmentor is not None and eigenvalues is not None:
@@ -68,7 +73,7 @@ class ContrastiveLearningDataset:
                 resize_transform,
                 ContrastiveLearningViewGenerator(
                     self.get_simclr_pipeline_transform(
-                        size=self.args.stl_resize if img_size == 96 else 32,
+                        size=self.args.stl_resize if img_size != 32 else 32,
                         min_crop_scale=self.args.min_crop_scale_spatial,
                         color_jitter_prob=self.args.color_jitter_prob,
                         gray_scale_prob=self.args.gray_scale_prob), n_views)])
@@ -76,4 +81,14 @@ class ContrastiveLearningDataset:
         else:
             transform = resize_transform
 
-        return dataset_class(dataset_root, transform=transform, download=False, **dataset_kwargs)
+                # --- Instantiate dataset ---
+        if name in ('cifar10', 'stl10'):
+            return dataset_class(dataset_root, transform=transform, download=False, **dataset_kwargs)
+        elif name == 'tinyimagenet':
+            if split in ('train', 'unlabeled') or train:
+                # Use the entire train folder as unlabeled SSL pool
+                return datasets.ImageFolder(root=os.path.join(dataset_root, 'train'), transform=transform)
+            elif split in ('val', 'test') or (not train):
+                return TinyImageNetValDataset(root_dir=dataset_root, transform=transform)
+            else:
+                raise ValueError(f"Unsupported split '{split}' for tinyimagenet")

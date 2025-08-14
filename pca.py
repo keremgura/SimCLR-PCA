@@ -2,7 +2,7 @@
 import os
 import numpy as np
 import matplotlib.pyplot as plt
-from sklearn.decomposition import PCA
+from sklearn.decomposition import PCA, IncrementalPCA
 import torch
 from torch.utils.data import DataLoader
 import torchvision
@@ -21,7 +21,7 @@ transform = transforms.Compose([
 
 # ─── CIFAR-10 PCA ───────────────────────────────────────────────────────────────
 # Load entire CIFAR-10 train split
-cifar_ds = torchvision.datasets.CIFAR10(
+"""cifar_ds = torchvision.datasets.CIFAR10(
     root="./data/cifar10",
     train=True,
     download=False,
@@ -77,7 +77,54 @@ np.save(os.path.join(output_dir, f"eigenvalues_ipca_stl10_{resize}.npy"),
 np.save(os.path.join(output_dir, f"eigen_ratio_ipca_stl10_{resize}.npy"),
         pca_stl.explained_variance_ratio_)
 
-cum_ratio_stl = np.cumsum(pca_stl.explained_variance_ratio_)
+cum_ratio_stl = np.cumsum(pca_stl.explained_variance_ratio_)"""
+
+# ─── Tiny ImageNet PCA (Incremental) ──────────────────────────────────────────
+tiny_root = "./data/tiny-imagenet-200"
+tiny_train_dir = os.path.join(tiny_root, "train")
+if os.path.isdir(tiny_train_dir):
+    # ImageFolder over train/ (200 classes in subfolders)
+    tiny_ds = torchvision.datasets.ImageFolder(
+        root=tiny_train_dir,
+        transform=transform
+    )
+    # Use a moderate batch size to keep memory in check
+    tiny_loader = DataLoader(tiny_ds, batch_size=2048, shuffle=False, num_workers=4)
+
+    # First pass: compute per-feature mean and std (Welford-like via sums)
+    N = len(tiny_ds)
+    D = 3 * resize * resize
+    sum_vec = np.zeros(D, dtype=np.float64)
+    sumsq_vec = np.zeros(D, dtype=np.float64)
+
+    for imgs, _ in tiny_loader:
+        arr = imgs.numpy().reshape(imgs.size(0), -1)  # (B, D)
+        sum_vec += arr.sum(axis=0)
+        sumsq_vec += (arr ** 2).sum(axis=0)
+
+    mean_vec = sum_vec / N
+    var_vec = (sumsq_vec / N) - (mean_vec ** 2)
+    std_vec = np.sqrt(np.maximum(var_vec, 1e-12))
+
+    # Second pass: IncrementalPCA on standardized batches
+    ipca = IncrementalPCA(n_components=D)
+    for imgs, _ in tiny_loader:
+        arr = imgs.numpy().reshape(imgs.size(0), -1)
+        arr_std = (arr - mean_vec) / (std_vec + 1e-8)
+        ipca.partial_fit(arr_std)
+
+    # Save PCA results for Tiny ImageNet
+    np.save(os.path.join(output_dir, f"pc_matrix_ipca_tinyimagenet_{resize}.npy"),
+            ipca.components_)
+    np.save(os.path.join(output_dir, f"eigenvalues_ipca_tinyimagenet_{resize}.npy"),
+            ipca.explained_variance_)
+    np.save(os.path.join(output_dir, f"eigen_ratio_ipca_tinyimagenet_{resize}.npy"),
+            ipca.explained_variance_ratio_)
+
+    cum_ratio_tiny = np.cumsum(ipca.explained_variance_ratio_)
+else:
+    cum_ratio_tiny = None
+
 
 # ─── Plot & Save Comparison ───────────────────────────────────────────────────
 plt.figure()

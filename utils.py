@@ -14,7 +14,7 @@ import torchvision.transforms.functional as F
 import torchvision.transforms as transforms
 from tqdm import tqdm
 import torch.nn as nn
-from torch.utils.data import DataLoader, random_split
+from torch.utils.data import DataLoader, random_split, Subset
 from torch.optim import lr_scheduler  # ensure this is at the top of the file
 
 
@@ -234,7 +234,7 @@ def setup_pca(args, dataset):
     if args.dataset_name == "cifar10":
         pca_matrix = torch.tensor(np.load("/cluster/home/kguera/SimCLR/outputs/pc_matrix_ipca.npy"), dtype=torch.float32, device=args.device)
         eigenvalues = torch.tensor(np.load("/cluster/home/kguera/SimCLR/outputs/eigenvalues_ratio_ipca.npy"), dtype=torch.float32, device=args.device)
-    else:
+    elif args.dataset_name == "stl10":
         imagenet_basis = False # select use of basis
 
         if imagenet_basis:
@@ -248,24 +248,32 @@ def setup_pca(args, dataset):
 
             pca_matrix = torch.tensor(np.load(pca_matrix_path), dtype=torch.float32, device=args.device)
             eigenvalues = torch.tensor(np.load(eigenvalues_path), dtype=torch.float32, device=args.device)
+    else:
+        pca_matrix = torch.tensor(np.load("/cluster/home/kguera/SimCLR/outputs/pc_matrix.npy"), dtype=torch.float32, device=args.device).T
+        eigenvalues = torch.tensor(np.load("/cluster/home/kguera/SimCLR/outputs/eigenvalues_ratio.npy"), dtype=torch.float32, device=args.device)
 
    
 
     eigenvalues = eigenvalues.cpu()
     pca_matrix = pca_matrix.cpu()
 
-    # Compute global mean and std for normalization before PCA
-    all_images = []
-    for img, _ in dataset.get_dataset(args.dataset_name, n_views=1, augmentations=False):
-        if isinstance(img, (list, tuple)):
-            img = img[0]
-        if not isinstance(img, torch.Tensor):
-            img = transforms.ToTensor()(img)
-        all_images.append(img.view(-1))
-    all_images = torch.stack(all_images)
-    mean = all_images.mean(dim=0).to(args.device)
-    std = all_images.std(dim=0).to(args.device)
-
+    if args.dataset_name != "tiny_imagenet":
+        # Compute global mean and std for normalization before PCA
+        all_images = []
+        for img, _ in dataset.get_dataset(args.dataset_name, n_views=1, augmentations=False):
+            if isinstance(img, (list, tuple)):
+                img = img[0]
+            if not isinstance(img, torch.Tensor):
+                img = transforms.ToTensor()(img)
+            all_images.append(img.view(-1))
+        all_images = torch.stack(all_images)
+        mean = all_images.mean(dim=0).to(args.device)
+        std = all_images.std(dim=0).to(args.device)
+    else:
+        mean = torch.tensor(np.load("/cluster/home/kguera/SimCLR/outputs/mean_reshaped.npy"), dtype=torch.float32, device=args.device).view(-1)
+        
+        std = torch.tensor(np.load("/cluster/home/kguera/SimCLR/outputs/std_reshaped.npy"), dtype=torch.float32, device=args.device).view(-1)
+        print(mean.shape, std.shape)
     
 
 
@@ -280,6 +288,8 @@ def setup_pca(args, dataset):
 
 
 def prepare_dataloaders(args, dataset, pca_augmentor, eigenvalues):
+    # 1. At the very start of the function, print the dataset name and any relevant args like subset_size.
+    print(f"[prepare_dataloaders] Starting. Dataset: {args.dataset_name}, subset_size: {getattr(args, 'subset_size', None)}")
     image_size = args.stl_resize if args.dataset_name == 'stl10' else 32
 
     if args.dataset_name == 'stl10':
@@ -301,9 +311,10 @@ def prepare_dataloaders(args, dataset, pca_augmentor, eigenvalues):
             augmentations=True,
             extra_augmentations=False,
             split='train')
-    elif args.dataset_name == 'tinyimagenet':
+    elif args.dataset_name == 'tiny_imagenet':
+        print("[prepare_dataloaders] Loading train_dataset: tiny_imagenet split='train'")
         train_dataset = dataset.get_dataset(
-            name='tinyimagenet',
+            name='tiny_imagenet',
             n_views=args.n_views,
             pca_augmentor=pca_augmentor,
             eigenvalues=eigenvalues,
@@ -311,8 +322,12 @@ def prepare_dataloaders(args, dataset, pca_augmentor, eigenvalues):
             extra_augmentations=False,
             split='train',
             train=True)
+
+        print(f"[prepare_dataloaders] train_dataset loaded. Length: {len(train_dataset)}")
+        print("[prepare_dataloaders] Loading val_dataset: tiny_imagenet split='val'")
+
         val_dataset = dataset.get_dataset(
-            name='tinyimagenet',
+            name='tiny_imagenet',
             n_views=args.n_views,
             pca_augmentor=pca_augmentor,
             eigenvalues=eigenvalues,
@@ -321,6 +336,7 @@ def prepare_dataloaders(args, dataset, pca_augmentor, eigenvalues):
             split='val',
             train=False)
     else:
+        print("dataset name different")
         full_dataset = dataset.get_dataset(
             args.dataset_name,
             n_views=args.n_views,
@@ -396,6 +412,7 @@ def visualize_views(train_dataset, original_dataset, args):
         img_views, label = train_dataset[i]
 
         img1, img2 = img_views[0], img_views[1]
+
         
         if img1.ndim == 1:
             img1 = img1.view(3, 32, 32)

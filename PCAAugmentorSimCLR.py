@@ -97,8 +97,8 @@ class PCAAugmentor:
 
 
         # Apply slight randomization to drop and retain ratios for both input and target
-        drop_randomize = 0.1 if d > 0 else 0
-        mask_randomize = 0.1
+        drop_randomize = 0 if d > 0 else 0
+        mask_randomize = 0
 
         def randomized(r, eps):
             return r + (torch.rand(1, device=self.device).item() * 2 * eps - eps)
@@ -128,12 +128,23 @@ class PCAAugmentor:
                 np.clip(drop_target, 0.0, 0.5),
                 np.clip(retain_target, 0.0, 1.0))   
         else:
-            base_mask = sample_view_mask(selected_strategy_input, d, 1.0)
+            """base_mask = sample_view_mask(selected_strategy_input, d, 1.0)
             if self.shuffle:
                 base_mask = base_mask[torch.randperm(base_mask.shape[0])]
             split_idx = int(m * base_mask.shape[0])
             
-            pc_mask_input, pc_mask_target = base_mask[:split_idx], base_mask[split_idx:]
+            pc_mask_input, pc_mask_target = base_mask[:split_idx], base_mask[split_idx:]"""
+            # Build a permutation over ALL PCs, then split into two disjoint, complementary sets
+            n = eigenvalues.shape[0]
+            perm = torch.randperm(n, device=self.device) if self.shuffle else torch.arange(n, device=self.device)
+
+            # Number of PCs assigned to the input view based on pca_ratio
+            k = int(round(m * n))
+            k = max(0, min(n, k))  # clamp to [0, n]
+
+            pc_mask_input = perm[:k].long()
+            pc_mask_target = perm[k:].long()
+
 
         return pc_mask_input, pc_mask_target
 
@@ -188,11 +199,13 @@ class PCAAugmentor:
                 stride=self.patch_size)
             
             P = patches.squeeze(0).transpose(0,1)
+            
 
             recon_in, recon_tg = [], []
             for idx in range(H_p * W_p):
                 i, j = divmod(idx, W_p)
                 Pmat = self.pca_matrix_grid[i][j].T.to(P.dtype)
+                
                 eigs = eigenvalues[i][j].to(P.dtype)
                 
                 mean_v = self.mean_grid[i][j].unsqueeze(0).to(P.dtype)
@@ -203,20 +216,38 @@ class PCAAugmentor:
                 Pin = Pmat[:, pc_in]
                 Pt = Pmat[:, pc_tg]
 
-                recon_in.append((pv @ Pin) @ Pin.T)
-                recon_tg.append((pv @ Pt)  @ Pt.T)
+                r_in = (pv @ Pin) @ Pin.T
+                r_tg = (pv @ Pt)  @ Pt.T
+                recon_in.append(r_in)
+                recon_tg.append(r_tg)
 
             # fold back into images
             stack_in = torch.cat(recon_in, dim=0).transpose(0,1).unsqueeze(0)
             stack_tg = torch.cat(recon_tg, dim=0).transpose(0,1).unsqueeze(0)
 
-            img1 = F.fold(
+                        
+            """sum_patches = []
+            for idx in range(H_p * W_p):
+                i, j = divmod(idx, W_p)
+                mean_v = self.mean_grid[i][j].unsqueeze(0).to(P.dtype)
+                std_v  = self.std_grid[i][j].unsqueeze(0).to(P.dtype)
+                sum_patch = (recon_in[idx] + recon_tg[idx]) * std_v + mean_v  # back to pixel space
+                sum_patches.append(sum_patch)
+
+                        
+            stack_sum = torch.cat(sum_patches, dim=0).transpose(0,1).unsqueeze(0)
+            
+                
+            img_sum = F.fold(
+                stack_sum, output_size=(H, W),
+                kernel_size=self.patch_size, stride=self.patch_size).squeeze(0)"""
+
+            img1 = F.fold(# fold back into images (use the same sum image for both outputs)
                 stack_in, output_size=(H,W),
                 kernel_size=self.patch_size, stride=self.patch_size).squeeze(0)
             img2 = F.fold(
                 stack_tg, output_size=(H,W),
                 kernel_size=self.patch_size, stride=self.patch_size).squeeze(0)
-
 
 
             return norm(img1), norm(img2)
@@ -243,6 +274,13 @@ class PCAAugmentor:
                 # Compute which PCA components to mask
                 p_input = self.masking_fn_[:, pc_mask_input]
                 p_target = self.masking_fn_[:, pc_mask]
+
+                """proj_sum = p_input @ p_input.T + p_target @ p_target.T
+                identity = torch.eye(proj_sum.shape[0], device=proj_sum.device)
+
+                # Check deviation from identity
+                print("Max abs diff from I:", torch.max(torch.abs(proj_sum - identity)).item())
+                print("Frobenius norm diff:", torch.norm(proj_sum - identity, p='fro').item())"""
                 
                 target = (img_flat @ p_target) @ p_target.T
                 img_reconstructed = (img_flat @ p_input) @ p_input.T
@@ -250,6 +288,9 @@ class PCAAugmentor:
             if self.normalize:
                 img_reconstructed = norm(img_reconstructed)
                 target = norm(target)
+
+            """img_reconstructed = (img_reconstructed + target) * self.std + self.mean
+            target = (img_reconstructed + target) * self.std + self.mean"""
                 
             return img_reconstructed.view(img.shape), target.view(img.shape) # no switching to cpu
 

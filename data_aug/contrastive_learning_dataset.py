@@ -1,9 +1,13 @@
 from torchvision.transforms import transforms
 import torch
+import os
 from data_aug.gaussian_blur import GaussianBlur
 from torchvision import transforms, datasets
 from data_aug.view_generator import ContrastiveLearningViewGenerator, PCAAugmentorWrapper, PCAPlusTransformWrapper
 from exceptions.exceptions import InvalidDatasetSelection
+from PIL import Image
+
+
 
 class IdentityTransform:
     def __call__(self, x):
@@ -31,7 +35,7 @@ class ContrastiveLearningDataset:
         dataset_paths = {
             'cifar10': f"{self.args.data}/cifar10",
             'stl10': f"{self.args.data}/stl10",
-            'tinyimagenet': f"{self.args.data}/tiny-imagenet-200"}
+            'tiny_imagenet': f"{self.args.data}/tiny-imagenet-200"}
 
         if name not in dataset_paths:
             raise ValueError(f"Dataset {name} is not supported!")
@@ -46,7 +50,7 @@ class ContrastiveLearningDataset:
             dataset_class = datasets.STL10
             dataset_kwargs = {'split': split}
             img_size = 96
-        elif name == 'tinyimagenet':
+        elif name == 'tiny_imagenet':
             dataset_class = None  # handled below with ImageFolder / TinyImageNetValDataset
             dataset_kwargs = {}
             img_size = 32
@@ -81,14 +85,14 @@ class ContrastiveLearningDataset:
         else:
             transform = resize_transform
 
-                # --- Instantiate dataset ---
+        # --- Instantiate dataset ---
         if name in ('cifar10', 'stl10'):
             return dataset_class(dataset_root, transform=transform, download=False, **dataset_kwargs)
-        elif name == 'tinyimagenet':
+        elif name == 'tiny_imagenet':
             if split in ('train', 'unlabeled') or train:
                 # Use the entire train folder as unlabeled SSL pool
                 return datasets.ImageFolder(root=os.path.join(dataset_root, 'train'), transform=transform)
             elif split in ('val', 'test') or (not train):
-                return TinyImageNetValDataset(root_dir=dataset_root, transform=transform)
+                return datasets.ImageFolder(root=os.path.join(dataset_root, 'val_split'), transform=transform)
             else:
                 raise ValueError(f"Unsupported split '{split}' for tinyimagenet")

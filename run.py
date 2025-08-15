@@ -33,7 +33,7 @@ model_names = sorted(name for name in models.__dict__
 parser = argparse.ArgumentParser(description='PyTorch SimCLR')
 parser.add_argument('-data', metavar='DIR', default='./data',
                     help='path to dataset')
-parser.add_argument('--dataset_name', default='cifar10',
+parser.add_argument('--dataset_name', default='tiny_imagenet',
                     help='dataset name', choices=['stl10', 'cifar10', 'tiny_imagenet'])
 parser.add_argument('-a', '--arch', metavar='ARCH', default='resnet18',
                     choices=model_names,
@@ -87,7 +87,7 @@ parser.add_argument('--min_crop_scale', default = 0.6, type = float, help = 'min
 parser.add_argument('--double', action='store_true', help = 'enables double shuffling')
 parser.add_argument('--interpolate', action='store_true', help = 'enables interpolating')
 parser.add_argument('--pad_strategy', default = "random", choices = ["hybrid", "pad", "mean", "gaussian", "random"])
-parser.add_argument('--stl_resize', default = 32, type = int, help = "Resizing applied to stl10 image data")
+parser.add_argument('--stl_resize', default = 64, type = int, help = "Resizing applied to stl10 image data")
 parser.add_argument('--masking_method', default = "global", choices = ["global", "stochastic", "cyclical", "auto", "combined", "patch_agnostic", "patch_specific"], help = "method of masking to use while generating pca-based augmentations")
 parser.add_argument("--base_fractions", type=float, nargs=2, default=[0.1, 0.3], help="Two base fractions for cyclic PCA masking shift per view")
 parser.add_argument("--patch_size", default = 16, type = int, help = "patch size in 2D or patchified masking")
@@ -99,6 +99,8 @@ parser.add_argument("--warmup_epochs", default = 10, type = int, help = "number 
 parser.add_argument('--min_crop_scale_spatial', default = 0.08, type = float, help = 'minimum scale for cropping if extra transformations are used')
 parser.add_argument("--color_jitter_prob", default = 0.8, type = float)
 parser.add_argument("--gray_scale_prob", default = 0.2, type = float)
+
+parser.add_argument('--subset_size', default = 1000)
 
 
 #ViT parameters

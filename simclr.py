@@ -28,7 +28,7 @@ class SimCLR(object):
         self.criterion = torch.nn.CrossEntropyLoss().to(self.args.device)
 
         self.classifier, self.classifier_optimizer, self.classifier_criterion = get_linear_classifier(
-            out_dim=self.args.out_dim, device=self.args.device)
+                out_dim=self.args.out_dim, num_classes = 200 if self.args.dataset_name == "tiny_imagenet" else 10, device=self.args.device)
 
     def _setup_logging(self):
         experiment_name = generate_experiment_name(self.args)
@@ -169,9 +169,9 @@ class SimCLR(object):
         contrastive_loss_total = 0.0
         contrastive_batches = 0
         val_top1_accuracies = []
-
+        
         classifier, classifier_optimizer, classifier_criterion = get_linear_classifier(
-                out_dim=self.args.out_dim, device=self.args.device)
+                out_dim=self.args.out_dim, num_classes = 200 if self.args.dataset_name == "tiny_imagenet" else 10, device=self.args.device)
 
         feature_list, label_list = [], []
 
@@ -241,7 +241,7 @@ class SimCLR(object):
         out_dim = self.args.vit_hidden_size if self.args.vit else (512 if self.args.arch == "resnet18" else 2048)
         
         classifier, optimizer, criterion = get_linear_classifier(
-            out_dim=out_dim, device=self.args.device)
+            out_dim=out_dim, num_classes = 200 if self.args.dataset_name == "tiny_imagenet" else 10, device=self.args.device)
 
         
 

@@ -350,7 +350,31 @@ def prepare_dataloaders(args, dataset, pca_augmentor, eigenvalues):
         val_size = len(full_dataset) - train_size
         train_dataset, val_dataset = random_split(full_dataset, [train_size, val_size])
 
-    
+    subset_size = getattr(args, 'subset_size', None)
+    if subset_size is not None:
+        try:
+            subset_size = int(subset_size)
+        except Exception:
+            subset_size = None
+    if subset_size and subset_size > 0:
+        print(f"[prepare_dataloaders] Starting subset selection with subset_size={subset_size}")
+        # Use a seeded generator if provided for reproducibility
+        seed = getattr(args, 'seed', None)
+        gen = torch.Generator()
+        if seed is not None:
+            try:
+                gen.manual_seed(int(seed))
+            except Exception:
+                pass
+        # Subset train
+        if subset_size < len(train_dataset):
+            idx = torch.randperm(len(train_dataset), generator=gen)[:subset_size]
+            train_dataset = Subset(train_dataset, idx.tolist())
+        # Subset val
+        if subset_size < len(val_dataset):
+            idx = torch.randperm(len(val_dataset), generator=gen)[:subset_size]
+            val_dataset = Subset(val_dataset, idx.tolist())
+            
     extra_aug_list = []
     if not (args.dataset_name == 'stl10' and args.stl_resize == 96):
         extra_aug_list.append(transforms.Resize((image_size, image_size)))

@@ -128,24 +128,49 @@ class PCAAugmentor:
                 np.clip(drop_target, 0.0, 0.5),
                 np.clip(retain_target, 0.0, 1.0))   
         else:
-            """base_mask = sample_view_mask(selected_strategy_input, d, 1.0)
-            if self.shuffle:
-                base_mask = base_mask[torch.randperm(base_mask.shape[0])]
-            split_idx = int(m * base_mask.shape[0])
+            index_based_approach = False
             
-            pc_mask_input, pc_mask_target = base_mask[:split_idx], base_mask[split_idx:]"""
-            # Build a permutation over ALL PCs, then split into two disjoint, complementary sets
-            n = eigenvalues.shape[0]
-            perm = torch.randperm(n, device=self.device) if self.shuffle else torch.arange(n, device=self.device)
+            n = eigenvalues.numel()
+            order = torch.randperm(n, device=self.device) if self.shuffle else torch.arange(n, device=self.device)
+            eigs_shuffled = eigenvalues[order]
+            cumsum = torch.cumsum(eigs_shuffled, dim=0)
+            total = cumsum[-1]
 
-            # Number of PCs assigned to the input view based on pca_ratio
-            k = int(round(m * n))
-            k = max(0, min(n, k))  # clamp to [0, n]
+            
+            d_clamped = float(np.clip(d, 0.0, 0.5))
+            m_clamped = float(np.clip(m, 0.0, 1.0))
+            drop_mass = torch.as_tensor(d_clamped, device=self.device) * total
+            retain_mass = torch.as_tensor(m_clamped, device=self.device) * (total - drop_mass)
 
-            pc_mask_input = perm[:k].long()
-            pc_mask_target = perm[k:].long()
+            # Find the smallest contiguous block [start:end) in the shuffled order that hits the variance target
+            start_idx = torch.searchsorted(cumsum, drop_mass)
+            target_mass = drop_mass + retain_mass
+            end_idx = torch.searchsorted(cumsum, target_mass)
 
+            # Guard rails
+            start_idx = torch.clamp(start_idx, 0, n)
+            end_idx = torch.clamp(end_idx, start_idx, n)
 
+            pc_mask_input = order[start_idx:end_idx].long()
+
+            # Complement goes to target
+            if start_idx == 0:
+                pc_mask_target = order[end_idx:].long()
+            elif end_idx == n:
+                pc_mask_target = order[:start_idx].long()
+            else:
+                pc_mask_target = torch.cat([order[:start_idx], order[end_idx:]], dim=0).long()
+
+            if index_based_approach:
+                base_mask = sample_view_mask(selected_strategy_input, d, 1.0)
+                if self.shuffle:
+                    base_mask = base_mask[torch.randperm(base_mask.shape[0])]
+                split_idx = int(m * base_mask.shape[0])
+                
+                pc_mask_input, pc_mask_target = base_mask[:split_idx], base_mask[split_idx:]
+            
+
+        
         return pc_mask_input, pc_mask_target
 
     def extract_views(self, img, eigenvalues, index = None):

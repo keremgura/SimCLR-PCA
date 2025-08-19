@@ -14,6 +14,7 @@ class PCAAugmentor:
                  
         self.pca_ratio = pca_ratio
         self.device = device
+        #self.device = 'cpu'
         self.img_size = img_size
         
         self.use_patch = patch_size is not None
@@ -25,7 +26,7 @@ class PCAAugmentor:
             self.mean_grid = mean_grid
             self.std_grid = std_grid
         else:
-            self.masking_fn_ = masking_fn_.to(device)
+            self.masking_fn_ = masking_fn_.to(self.device)
 
         self.num_pixels = 3 * patch_size * patch_size if self.use_patch else img_size * img_size * 3
         self.normalize = normalize
@@ -40,8 +41,8 @@ class PCAAugmentor:
         self.pad_strategy = pad_strategy
         self.precomputed_masks = None
         
-        self.mean = torch.tensor(mean, dtype=torch.float32, device=device) if mean is not None else None
-        self.std = torch.tensor(std, dtype=torch.float32, device=device) if std is not None else None
+        self.mean = torch.tensor(mean, dtype=torch.float32, device=self.device) if mean is not None else None
+        self.std = torch.tensor(std, dtype=torch.float32, device=self.device) if std is not None else None
 
         self.to_tensor = transforms.ToTensor()
 
@@ -243,6 +244,9 @@ class PCAAugmentor:
 
                 r_in = (pv @ Pin) @ Pin.T
                 r_tg = (pv @ Pt)  @ Pt.T
+
+                r_in = r_in * std_v + mean_v
+                r_tg = r_tg * std_v + mean_v
                 recon_in.append(r_in)
                 recon_tg.append(r_tg)
 
@@ -275,7 +279,8 @@ class PCAAugmentor:
                 kernel_size=self.patch_size, stride=self.patch_size).squeeze(0)
 
 
-            return norm(img1), norm(img2)
+            #return norm(img1), norm(img2)
+            return img1, img2
 
         if not self.use_patch:
             # --- Global PCA path ---

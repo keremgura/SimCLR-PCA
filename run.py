@@ -42,7 +42,7 @@ parser.add_argument('-a', '--arch', metavar='ARCH', default='resnet18',
                          ' (default: resnet18)')
 parser.add_argument('-j', '--workers', default=0, type=int, metavar='N', # 12 normally
                     help='number of data loading workers (default: 32)')
-parser.add_argument('--epochs', default=200, type=int, metavar='N',
+parser.add_argument('--epochs', default=100, type=int, metavar='N',
                     help='number of total epochs to run')
 parser.add_argument('-b', '--batch_size', default=256, type=int,
                     metavar='N',
@@ -87,10 +87,10 @@ parser.add_argument('--min_crop_scale', default = 0.6, type = float, help = 'min
 parser.add_argument('--double', action='store_true', help = 'enables double shuffling')
 parser.add_argument('--interpolate', action='store_true', help = 'enables interpolating')
 parser.add_argument('--pad_strategy', default = "random", choices = ["hybrid", "pad", "mean", "gaussian", "random"])
-parser.add_argument('--stl_resize', default = 64, type = int, help = "Resizing applied to stl10 image data")
+parser.add_argument('--stl_resize', default = 32, type = int, help = "Resizing applied to stl10 image data")
 parser.add_argument('--masking_method', default = "global", choices = ["global", "stochastic", "cyclical", "auto", "combined", "patch_agnostic", "patch_specific"], help = "method of masking to use while generating pca-based augmentations")
 parser.add_argument("--base_fractions", type=float, nargs=2, default=[0.1, 0.3], help="Two base fractions for cyclic PCA masking shift per view")
-parser.add_argument("--patch_size", default = 16, type = int, help = "patch size in 2D or patchified masking")
+parser.add_argument("--patch_size", default = 8, type = int, help = "patch size in 2D or patchified masking")
 parser.add_argument('--patch_pca_agnostic', action='store_true', help = "whether to use position-agnostic patchified pca")
 parser.add_argument('--patch_pca_specific', action = 'store_true', help = "whether to use position-sepcific patchified pca")
 
@@ -100,7 +100,7 @@ parser.add_argument('--min_crop_scale_spatial', default = 0.08, type = float, he
 parser.add_argument("--color_jitter_prob", default = 0.8, type = float)
 parser.add_argument("--gray_scale_prob", default = 0.2, type = float)
 
-parser.add_argument('--subset_size', default = 1000)
+parser.add_argument('--subset_size', default = 10000)
 
 
 #ViT parameters
@@ -112,6 +112,9 @@ parser.add_argument('--vit_intermediate_size', type=int, default=None, help='Opt
 parser.add_argument('--vit_pooling', type=str, choices=['cls', 'mean', 'both'], default='both', help='Pooling strategy: CLS token or mean of patch tokens')
 parser.add_argument('--proj_hidden_dim', type=int, default=512, help='ViT projector hidden dim')
 parser.add_argument('--proj_num_layers', type=int, default=2)
+
+parser.add_argument('--debug_timing', default = 1)
+parser.add_argument('--debug_every', default = 10)
 
 import torch.multiprocessing as mp
 mp.set_start_method('spawn', force=True)
@@ -155,24 +158,27 @@ def main():
         augmentations=False,
         split='unlabeled')
 
-
     probe_train_dataset = dataset.get_dataset(
-        args.dataset_name,
-        n_views=1,
-        eigenvalues=None,
-        pca_augmentor=None,
-        augmentations=False,
-        split = 'train',
-        train = True)
+            args.dataset_name,
+            n_views=1,
+            eigenvalues=None,
+            pca_augmentor=None,
+            augmentations=False,
+            split = 'train',
+            train = True)
 
     probe_test_dataset = dataset.get_dataset(
-        args.dataset_name,
-        n_views=1,
-        eigenvalues=None,
-        pca_augmentor=None,
-        augmentations=False,
-        split = 'test',
-        train = False)
+            args.dataset_name,
+            n_views=1,
+            eigenvalues=None,
+            pca_augmentor=None,
+            augmentations=False,
+            split = 'test',
+            train = False)
+    
+
+        
+
 
     # Visualize a few samples for sanity checking
     visualize_views(train_dataset, visualization_base_dataset, args)

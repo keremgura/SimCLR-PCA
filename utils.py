@@ -230,12 +230,13 @@ def setup_pca(args, dataset):
 
         return pca_augmentor, eigenvalues_grid
 
-    
+    imagenet_basis = True if args.stl_resize == 32 else False
+
     if args.dataset_name == "cifar10":
         pca_matrix = torch.tensor(np.load("/cluster/home/kguera/SimCLR/outputs/pc_matrix_ipca.npy"), dtype=torch.float32, device=args.device)
         eigenvalues = torch.tensor(np.load("/cluster/home/kguera/SimCLR/outputs/eigenvalues_ratio_ipca.npy"), dtype=torch.float32, device=args.device)
     elif args.dataset_name == "stl10":
-        imagenet_basis = False # select use of basis
+        
 
         if imagenet_basis:
             pca_matrix = torch.tensor(np.load("/cluster/home/kguera/SimCLR/outputs/imagenet32_cifar10_pc_matrix_flipped.npy"), dtype=torch.float32, device=args.device).T
@@ -249,8 +250,12 @@ def setup_pca(args, dataset):
             pca_matrix = torch.tensor(np.load(pca_matrix_path), dtype=torch.float32, device=args.device)
             eigenvalues = torch.tensor(np.load(eigenvalues_path), dtype=torch.float32, device=args.device)
     else:
-        pca_matrix = torch.tensor(np.load("/cluster/home/kguera/SimCLR/outputs/pc_matrix.npy"), dtype=torch.float32, device=args.device).T
-        eigenvalues = torch.tensor(np.load("/cluster/home/kguera/SimCLR/outputs/eigenvalues_ratio.npy"), dtype=torch.float32, device=args.device)
+        if imagenet_basis:
+            pca_matrix = torch.tensor(np.load("/cluster/home/kguera/SimCLR/outputs/imagenet32_cifar10_pc_matrix_flipped.npy"), dtype=torch.float32, device=args.device).T
+            eigenvalues = torch.tensor(np.load("/cluster/home/kguera/SimCLR/outputs/imagenet32_cifar10_eigenvalues_ratio.npy"), dtype=torch.float32, device=args.device)
+        else:
+            pca_matrix = torch.tensor(np.load("/cluster/home/kguera/SimCLR/outputs/pc_matrix.npy"), dtype=torch.float32, device=args.device).T
+            eigenvalues = torch.tensor(np.load("/cluster/home/kguera/SimCLR/outputs/eigenvalues_ratio.npy"), dtype=torch.float32, device=args.device)
 
    
 
@@ -270,10 +275,12 @@ def setup_pca(args, dataset):
         mean = all_images.mean(dim=0).to(args.device)
         std = all_images.std(dim=0).to(args.device)
     else:
-        mean = torch.tensor(np.load("/cluster/home/kguera/SimCLR/outputs/mean_reshaped.npy"), dtype=torch.float32, device=args.device).view(-1)
+        if imagenet_basis:
+            mean, std = None, None
+        else:
+            mean = torch.tensor(np.load("/cluster/home/kguera/SimCLR/outputs/mean_reshaped.npy"), dtype=torch.float32, device=args.device).view(-1)
+            std = torch.tensor(np.load("/cluster/home/kguera/SimCLR/outputs/std_reshaped.npy"), dtype=torch.float32, device=args.device).view(-1)
         
-        std = torch.tensor(np.load("/cluster/home/kguera/SimCLR/outputs/std_reshaped.npy"), dtype=torch.float32, device=args.device).view(-1)
-        print(mean.shape, std.shape)
     
 
 
@@ -289,7 +296,7 @@ def setup_pca(args, dataset):
 
 def prepare_dataloaders(args, dataset, pca_augmentor, eigenvalues):
     # 1. At the very start of the function, print the dataset name and any relevant args like subset_size.
-    print(f"[prepare_dataloaders] Starting. Dataset: {args.dataset_name}, subset_size: {getattr(args, 'subset_size', None)}")
+    #print(f"[prepare_dataloaders] Starting. Dataset: {args.dataset_name}, subset_size: {getattr(args, 'subset_size', None)}")
     image_size = args.stl_resize if args.dataset_name == 'stl10' else 32
 
     if args.dataset_name == 'stl10':
@@ -312,8 +319,8 @@ def prepare_dataloaders(args, dataset, pca_augmentor, eigenvalues):
             extra_augmentations=False,
             split='train')
     elif args.dataset_name == 'tiny_imagenet':
-        print("[prepare_dataloaders] Loading train_dataset: tiny_imagenet split='train'")
-        train_dataset = dataset.get_dataset(
+        #print("[prepare_dataloaders] Loading train_dataset: tiny_imagenet split='train'")
+        train_dataset_full = dataset.get_dataset(
             name='tiny_imagenet',
             n_views=args.n_views,
             pca_augmentor=pca_augmentor,
@@ -323,10 +330,14 @@ def prepare_dataloaders(args, dataset, pca_augmentor, eigenvalues):
             split='train',
             train=True)
 
-        print(f"[prepare_dataloaders] train_dataset loaded. Length: {len(train_dataset)}")
-        print("[prepare_dataloaders] Loading val_dataset: tiny_imagenet split='val'")
+        train_size = int((1 - args.validation_size) * len(train_dataset_full))
+        val_size = len(train_dataset_full) - train_size
+        train_dataset, val_dataset = random_split(train_dataset_full, [train_size, val_size])
 
-        val_dataset = dataset.get_dataset(
+        #print(f"[prepare_dataloaders] train_dataset loaded. Length: {len(train_dataset)}")
+        #print("[prepare_dataloaders] Loading val_dataset: tiny_imagenet split='val'")
+
+        """val_dataset = dataset.get_dataset(
             name='tiny_imagenet',
             n_views=args.n_views,
             pca_augmentor=pca_augmentor,
@@ -334,9 +345,9 @@ def prepare_dataloaders(args, dataset, pca_augmentor, eigenvalues):
             augmentations=True,
             extra_augmentations=False,
             split='val',
-            train=False)
+            train=False)"""
     else:
-        print("dataset name different")
+        #print("dataset name different")
         full_dataset = dataset.get_dataset(
             args.dataset_name,
             n_views=args.n_views,
@@ -356,7 +367,7 @@ def prepare_dataloaders(args, dataset, pca_augmentor, eigenvalues):
             subset_size = int(subset_size)
         except Exception:
             subset_size = None
-    if subset_size and subset_size > 0:
+    """if subset_size and subset_size > 0:
         print(f"[prepare_dataloaders] Starting subset selection with subset_size={subset_size}")
         # Use a seeded generator if provided for reproducibility
         seed = getattr(args, 'seed', None)
@@ -373,7 +384,7 @@ def prepare_dataloaders(args, dataset, pca_augmentor, eigenvalues):
         # Subset val
         if subset_size < len(val_dataset):
             idx = torch.randperm(len(val_dataset), generator=gen)[:subset_size]
-            val_dataset = Subset(val_dataset, idx.tolist())
+            val_dataset = Subset(val_dataset, idx.tolist())"""
             
     extra_aug_list = []
     if not (args.dataset_name == 'stl10' and args.stl_resize == 96):
@@ -419,10 +430,10 @@ def prepare_dataloaders(args, dataset, pca_augmentor, eigenvalues):
 
     
     train_loader = DataLoader(train_dataset, batch_size=args.batch_size, shuffle=True,
-                            num_workers=args.workers, drop_last=True, pin_memory = False)
+                            num_workers=args.workers, drop_last=True, pin_memory = False, persistent_workers = False)
 
     val_loader = DataLoader(val_dataset, batch_size=args.batch_size, shuffle=False,
-                            num_workers=args.workers, drop_last=True, pin_memory = False)
+                            num_workers=args.workers, drop_last=True, pin_memory = False, persistent_workers = False)
 
     return train_loader, val_loader, train_dataset
 

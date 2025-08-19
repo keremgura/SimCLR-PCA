@@ -1,12 +1,12 @@
 from torchvision.transforms import transforms
 import torch
 import os
+import glob
 from data_aug.gaussian_blur import GaussianBlur
 from torchvision import transforms, datasets
 from data_aug.view_generator import ContrastiveLearningViewGenerator, PCAAugmentorWrapper, PCAPlusTransformWrapper
 from exceptions.exceptions import InvalidDatasetSelection
 from PIL import Image
-
 
 
 class IdentityTransform:
@@ -92,7 +92,7 @@ class ContrastiveLearningDataset:
             if split in ('train', 'unlabeled') or train:
                 # Use the entire train folder as unlabeled SSL pool
                 return datasets.ImageFolder(root=os.path.join(dataset_root, 'train'), transform=transform)
-            elif split in ('val', 'test') or (not train):
-                return datasets.ImageFolder(root=os.path.join(dataset_root, 'val_split'), transform=transform)
             else:
-                raise ValueError(f"Unsupported split '{split}' for tinyimagenet")
+                return datasets.ImageFolder(root=os.path.join(dataset_root, 'val_split'), transform=transform)
+            
+            

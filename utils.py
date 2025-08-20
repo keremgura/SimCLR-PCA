@@ -334,18 +334,6 @@ def prepare_dataloaders(args, dataset, pca_augmentor, eigenvalues):
         val_size = len(train_dataset_full) - train_size
         train_dataset, val_dataset = random_split(train_dataset_full, [train_size, val_size])
 
-        #print(f"[prepare_dataloaders] train_dataset loaded. Length: {len(train_dataset)}")
-        #print("[prepare_dataloaders] Loading val_dataset: tiny_imagenet split='val'")
-
-        """val_dataset = dataset.get_dataset(
-            name='tiny_imagenet',
-            n_views=args.n_views,
-            pca_augmentor=pca_augmentor,
-            eigenvalues=eigenvalues,
-            augmentations=True,
-            extra_augmentations=False,
-            split='val',
-            train=False)"""
     else:
         #print("dataset name different")
         full_dataset = dataset.get_dataset(
@@ -367,24 +355,7 @@ def prepare_dataloaders(args, dataset, pca_augmentor, eigenvalues):
             subset_size = int(subset_size)
         except Exception:
             subset_size = None
-    """if subset_size and subset_size > 0:
-        print(f"[prepare_dataloaders] Starting subset selection with subset_size={subset_size}")
-        # Use a seeded generator if provided for reproducibility
-        seed = getattr(args, 'seed', None)
-        gen = torch.Generator()
-        if seed is not None:
-            try:
-                gen.manual_seed(int(seed))
-            except Exception:
-                pass
-        # Subset train
-        if subset_size < len(train_dataset):
-            idx = torch.randperm(len(train_dataset), generator=gen)[:subset_size]
-            train_dataset = Subset(train_dataset, idx.tolist())
-        # Subset val
-        if subset_size < len(val_dataset):
-            idx = torch.randperm(len(val_dataset), generator=gen)[:subset_size]
-            val_dataset = Subset(val_dataset, idx.tolist())"""
+    
             
     extra_aug_list = []
     if not (args.dataset_name == 'stl10' and args.stl_resize == 96):
@@ -396,7 +367,6 @@ def prepare_dataloaders(args, dataset, pca_augmentor, eigenvalues):
     size = args.stl_resize if args.dataset_name == 'stl10' else 32
     
     if pca_augmentor and args.extra_transforms == 0 and args.vit:
-        #train_dataset.dataset.transform = PCAAugmentorWrapper(
         target = train_dataset.dataset if hasattr(train_dataset, 'dataset') else train_dataset
         target.transform = PCAAugmentorWrapper(
             pca_augmentor=pca_augmentor,
@@ -405,7 +375,7 @@ def prepare_dataloaders(args, dataset, pca_augmentor, eigenvalues):
             patch_size=args.patch_size)
 
     if args.extra_transforms == 1: # apply a light version of augmentations
-        if args.dataset_name == 'stl10':
+        if args.dataset_name != 'cifar10':
 
             transform_list = []
             if args.stl_resize != 96:
@@ -417,6 +387,9 @@ def prepare_dataloaders(args, dataset, pca_augmentor, eigenvalues):
                 patch_size=args.patch_size,
                 n_views=args.n_views))
             train_dataset.transform = transforms.Compose(transform_list)
+
+            target = train_dataset.dataset if hasattr(train_dataset, 'dataset') else train_dataset
+            target.transform = transforms.Compose(transform_list)
             
         else:
             target = train_dataset.dataset if hasattr(train_dataset, 'dataset') else train_dataset
@@ -443,7 +416,7 @@ def visualize_views(train_dataset, original_dataset, args):
     save_folder = f"views/simclr_pca_{pca_ratio_str}"
     os.makedirs(save_folder, exist_ok=True)
 
-    for i in range(15):
+    for i in range(25):
         img_views, label = train_dataset[i]
 
         img1, img2 = img_views[0], img_views[1]

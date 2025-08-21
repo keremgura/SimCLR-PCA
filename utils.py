@@ -15,7 +15,7 @@ import torchvision.transforms as transforms
 from tqdm import tqdm
 import torch.nn as nn
 from torch.utils.data import DataLoader, random_split, Subset
-from torch.optim import lr_scheduler  # ensure this is at the top of the file
+from torch.optim import lr_scheduler
 
 
 
@@ -73,9 +73,8 @@ def generate_experiment_name(args, prefix="simclr"):
     interpolate_flag = "interpolate" if args.interpolate else ""
     drop_strategy = args.drop_strategy
     pad = str(args.pad_strategy)
-    resize=str(args.stl_resize)
+    resize=str(args.resize)
 
-    # Optional flags
     double_flag = "double" if getattr(args, "double", False) else ""
     vit_flag = "vit" if getattr(args, "vit", False) else ""
 
@@ -85,7 +84,6 @@ def generate_experiment_name(args, prefix="simclr"):
     wd = f"wd{args.weight_decay}"
     patch_size = str(args.patch_size)
 
-    # Assemble parts
     parts = [
         prefix,
         dataset,
@@ -115,9 +113,7 @@ def generate_experiment_name(args, prefix="simclr"):
         parts.append(f"gray{args.gray_scale_prob}")
         parts.append(f"crop{args.min_crop_scale_spatial}")
         parts.append(timestamp)
-
-
-    
+   
     experiment_name = "_".join(filter(None, parts))
     return experiment_name
     
@@ -127,7 +123,6 @@ def compute_dataset_min_max(dataset):
     global_min, global_max = float('inf'), float('-inf')
 
     for img_sample, _ in dataset:
-        # If dataset returns multiple views per sample
         if isinstance(img_sample, (list, tuple)):
             images = img_sample
         else:
@@ -145,10 +140,10 @@ def setup_pca(args, dataset):
     if args.pca != 1:
         return None, None
     if args.patch_pca_agnostic:
-        resize_str = str(args.stl_resize) if args.dataset_name == "stl10" else "32"
-        # Base directory where patch PCA files are saved
+        resize_str = str(args.resize) if args.dataset_name == "stl10" else "32"
+        
         patch_dir = os.path.join(os.path.dirname(__file__), "outputs", "patch_pca")
-        # Construct file paths
+        
         pca_matrix_path = os.path.join(patch_dir, f"patch_pc_matrix_{args.dataset_name}_{resize_str}_{args.patch_size}.npy")
         eigenvalues_path = os.path.join(patch_dir, f"patch_eigenvalues_{args.dataset_name}_{resize_str}_{args.patch_size}.npy")
 
@@ -156,6 +151,7 @@ def setup_pca(args, dataset):
             f"patch_mean_{args.dataset_name}_{resize_str}_{args.patch_size}.npy")
         std_path = os.path.join(patch_dir,
             f"patch_std_{args.dataset_name}_{resize_str}_{args.patch_size}.npy")
+
         # Load patch PCA results
         pca_matrix = torch.tensor(
             np.load(pca_matrix_path), dtype=torch.float32, device=args.device)
@@ -186,7 +182,7 @@ def setup_pca(args, dataset):
     if args.patch_pca_specific:
         patch_dir = os.path.join(os.path.dirname(__file__), "outputs", "patch_pca_pos")
         # Position-specific patch PCA loading
-        resize = args.stl_resize if args.dataset_name == "stl10" else 32
+        resize = args.resize if args.dataset_name == "stl10" else 32
         H_p = W_p = resize // args.patch_size
         # Prepare grids to hold per-cell bases and eigenvalues
         pca_matrix_grid = [[None for _ in range(W_p)] for _ in range(H_p)]
@@ -196,7 +192,7 @@ def setup_pca(args, dataset):
                 base = f"pos_{i}_{j}_{args.dataset_name}_{resize}_{args.patch_size}"
                 matrix_path = os.path.join(patch_dir, f"patch_pc_matrix_{base}.npy")
                 eig_path    = os.path.join(patch_dir, f"patch_eigenvalues_{base}.npy")
-                # Load into tensors on the correct device
+                
                 pca_matrix_grid[i][j]  = torch.tensor(np.load(matrix_path), dtype=torch.float32, device=args.device)
                 eigenvalues_grid[i][j] = torch.tensor(np.load(eig_path), dtype=torch.float32, device=args.device)
 
@@ -230,32 +226,30 @@ def setup_pca(args, dataset):
 
         return pca_augmentor, eigenvalues_grid
 
-    imagenet_basis = True if args.stl_resize == 32 else False
+    imagenet_basis = (args.resize == 32)
 
     if args.dataset_name == "cifar10":
-        pca_matrix = torch.tensor(np.load("/cluster/home/kguera/SimCLR/outputs/pc_matrix_ipca.npy"), dtype=torch.float32, device=args.device)
-        eigenvalues = torch.tensor(np.load("/cluster/home/kguera/SimCLR/outputs/eigenvalues_ratio_ipca.npy"), dtype=torch.float32, device=args.device)
+        pca_matrix = torch.tensor(np.load("./outputs/pc_matrix_ipca.npy"), dtype=torch.float32, device=args.device)
+        eigenvalues = torch.tensor(np.load("./outputs/eigenvalues_ratio_ipca.npy"), dtype=torch.float32, device=args.device)
     elif args.dataset_name == "stl10":
-        
-
         if imagenet_basis:
-            pca_matrix = torch.tensor(np.load("/cluster/home/kguera/SimCLR/outputs/imagenet32_cifar10_pc_matrix_flipped.npy"), dtype=torch.float32, device=args.device).T
-            eigenvalues = torch.tensor(np.load("/cluster/home/kguera/SimCLR/outputs/imagenet32_cifar10_eigenvalues_ratio.npy"), dtype=torch.float32, device=args.device)
+            pca_matrix = torch.tensor(np.load("./outputs/imagenet32_cifar10_pc_matrix_flipped.npy"), dtype=torch.float32, device=args.device).T
+            eigenvalues = torch.tensor(np.load("./outputs/imagenet32_cifar10_eigenvalues_ratio.npy"), dtype=torch.float32, device=args.device)
         else:
-            resize = str(args.stl_resize) if args.dataset_name == "stl10" else "32"
-            suffix = "stl" if args.dataset_name == "stl10" else "tinyimagenet"
-            pca_matrix_path = f"/cluster/home/kguera/SimCLR/outputs/pc_matrix_ipca_{suffix}_{resize}.npy"
-            eigenvalues_path = f"/cluster/home/kguera/SimCLR/outputs/eigenvalues_ratio_ipca_{suffix}_{resize}.npy"
+            resize = str(args.resize)
+            suffix = "stl"
+            pca_matrix_path = f"./outputs/pc_matrix_ipca_{suffix}_{resize}.npy"
+            eigenvalues_path = f"./outputs/eigenvalues_ratio_ipca_{suffix}_{resize}.npy"
 
             pca_matrix = torch.tensor(np.load(pca_matrix_path), dtype=torch.float32, device=args.device)
             eigenvalues = torch.tensor(np.load(eigenvalues_path), dtype=torch.float32, device=args.device)
     else:
         if imagenet_basis:
-            pca_matrix = torch.tensor(np.load("/cluster/home/kguera/SimCLR/outputs/imagenet32_cifar10_pc_matrix_flipped.npy"), dtype=torch.float32, device=args.device).T
-            eigenvalues = torch.tensor(np.load("/cluster/home/kguera/SimCLR/outputs/imagenet32_cifar10_eigenvalues_ratio.npy"), dtype=torch.float32, device=args.device)
+            pca_matrix = torch.tensor(np.load("./outputs/imagenet32_cifar10_pc_matrix_flipped.npy"), dtype=torch.float32, device=args.device).T
+            eigenvalues = torch.tensor(np.load("./outputs/imagenet32_cifar10_eigenvalues_ratio.npy"), dtype=torch.float32, device=args.device)
         else:
-            pca_matrix = torch.tensor(np.load("/cluster/home/kguera/SimCLR/outputs/pc_matrix.npy"), dtype=torch.float32, device=args.device).T
-            eigenvalues = torch.tensor(np.load("/cluster/home/kguera/SimCLR/outputs/eigenvalues_ratio.npy"), dtype=torch.float32, device=args.device)
+            pca_matrix = torch.tensor(np.load("./outputs/pc_matrix.npy"), dtype=torch.float32, device=args.device).T
+            eigenvalues = torch.tensor(np.load("./outputs/eigenvalues_ratio.npy"), dtype=torch.float32, device=args.device)
 
    
 
@@ -278,8 +272,8 @@ def setup_pca(args, dataset):
         if imagenet_basis:
             mean, std = None, None
         else:
-            mean = torch.tensor(np.load("/cluster/home/kguera/SimCLR/outputs/mean_reshaped.npy"), dtype=torch.float32, device=args.device).view(-1)
-            std = torch.tensor(np.load("/cluster/home/kguera/SimCLR/outputs/std_reshaped.npy"), dtype=torch.float32, device=args.device).view(-1)
+            mean = torch.tensor(np.load("./outputs/mean_reshaped.npy"), dtype=torch.float32, device=args.device).view(-1)
+            std = torch.tensor(np.load("./outputs/std_reshaped.npy"), dtype=torch.float32, device=args.device).view(-1)
         
     
 
@@ -295,9 +289,7 @@ def setup_pca(args, dataset):
 
 
 def prepare_dataloaders(args, dataset, pca_augmentor, eigenvalues):
-    # 1. At the very start of the function, print the dataset name and any relevant args like subset_size.
-    #print(f"[prepare_dataloaders] Starting. Dataset: {args.dataset_name}, subset_size: {getattr(args, 'subset_size', None)}")
-    image_size = args.stl_resize if args.dataset_name == 'stl10' else 32
+    image_size = args.resize if args.dataset_name != 'cifar10' else 32
 
     if args.dataset_name == 'stl10':
         train_dataset = dataset.get_dataset(
@@ -309,7 +301,6 @@ def prepare_dataloaders(args, dataset, pca_augmentor, eigenvalues):
             extra_augmentations=False,
             split='unlabeled')
 
-        # Validate on labeled set
         val_dataset = dataset.get_dataset(
             name='stl10',
             n_views=args.n_views,
@@ -319,7 +310,6 @@ def prepare_dataloaders(args, dataset, pca_augmentor, eigenvalues):
             extra_augmentations=False,
             split='train')
     elif args.dataset_name == 'tiny_imagenet':
-        #print("[prepare_dataloaders] Loading train_dataset: tiny_imagenet split='train'")
         train_dataset_full = dataset.get_dataset(
             name='tiny_imagenet',
             n_views=args.n_views,
@@ -335,36 +325,27 @@ def prepare_dataloaders(args, dataset, pca_augmentor, eigenvalues):
         train_dataset, val_dataset = random_split(train_dataset_full, [train_size, val_size])
 
     else:
-        #print("dataset name different")
         full_dataset = dataset.get_dataset(
-            args.dataset_name,
+            name = 'cifar10',
             n_views=args.n_views,
             pca_augmentor=pca_augmentor,
             eigenvalues=eigenvalues,
             augmentations=True,
             extra_augmentations=False)
-    
-
+        
         train_size = int((1 - args.validation_size) * len(full_dataset))
         val_size = len(full_dataset) - train_size
         train_dataset, val_dataset = random_split(full_dataset, [train_size, val_size])
-
-    subset_size = getattr(args, 'subset_size', None)
-    if subset_size is not None:
-        try:
-            subset_size = int(subset_size)
-        except Exception:
-            subset_size = None
     
-            
+    # Apply extra cropping
     extra_aug_list = []
-    if not (args.dataset_name == 'stl10' and args.stl_resize == 96):
+    if not (args.dataset_name == 'stl10' and args.resize == 96):
         extra_aug_list.append(transforms.Resize((image_size, image_size)))
     extra_aug_list.append(transforms.RandomResizedCrop(size=image_size, scale=(args.min_crop_scale, 1)))
     extra_aug_list.append(transforms.ToTensor())
     extra_augmentations = transforms.Compose(extra_aug_list)
 
-    size = args.stl_resize if args.dataset_name == 'stl10' else 32
+    size = args.resize if args.dataset_name == 'stl10' else 32
     
     if pca_augmentor and args.extra_transforms == 0 and args.vit:
         target = train_dataset.dataset if hasattr(train_dataset, 'dataset') else train_dataset
@@ -378,7 +359,7 @@ def prepare_dataloaders(args, dataset, pca_augmentor, eigenvalues):
         if args.dataset_name != 'cifar10':
 
             transform_list = []
-            if args.stl_resize != 96:
+            if args.resize not in (64, 96):
                 transform_list.append(transforms.Resize((size, size)))
             transform_list.append(PCAPlusTransformWrapper(pca_augmentor=pca_augmentor,
                 eigenvalues=eigenvalues,
@@ -420,8 +401,6 @@ def visualize_views(train_dataset, original_dataset, args):
         img_views, label = train_dataset[i]
 
         img1, img2 = img_views[0], img_views[1]
-
-        
         if img1.ndim == 1:
             img1 = img1.view(3, 32, 32)
         if img2.ndim == 1:
@@ -441,8 +420,6 @@ def visualize_views(train_dataset, original_dataset, args):
         for ax in axes: ax.axis('off')
         plt.savefig(os.path.join(save_folder, f"sample_{i}.png"))
         plt.close(fig)
-
-    print(f"Visualizations saved to: {save_folder}")
 
 class LinearWarmupScheduler:
     def __init__(self, optimizer, warmup_epochs, total_epochs, target_lr):

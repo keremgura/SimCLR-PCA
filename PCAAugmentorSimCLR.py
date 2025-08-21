@@ -13,8 +13,7 @@ class PCAAugmentor:
                  mean=None, std=None):
                  
         self.pca_ratio = pca_ratio
-        self.device = device
-        #self.device = 'cpu'
+        self.device = torch.device(device)
         self.img_size = img_size
         
         self.use_patch = patch_size is not None
@@ -26,9 +25,9 @@ class PCAAugmentor:
             self.mean_grid = mean_grid
             self.std_grid = std_grid
         else:
-            self.masking_fn_ = masking_fn_.to(self.device)
+            self.masking_fn_ = torch.as_tensor(masking_fn_, dtype=torch.float32, device=self.device)
 
-        self.num_pixels = 3 * patch_size * patch_size if self.use_patch else img_size * img_size * 3
+        self.num_pixels = 3 * ((self.patch_size ** 2) if self.use_patch else (self.img_size ** 2))
         self.normalize = normalize
         self.global_min = global_min
         self.global_max = global_max
@@ -41,8 +40,8 @@ class PCAAugmentor:
         self.pad_strategy = pad_strategy
         self.precomputed_masks = None
         
-        self.mean = torch.tensor(mean, dtype=torch.float32, device=self.device) if mean is not None else None
-        self.std = torch.tensor(std, dtype=torch.float32, device=self.device) if std is not None else None
+        self.mean = torch.as_tensor(mean, dtype=torch.float32, device=self.device) if mean is not None else None
+        self.std = torch.as_tensor(std, dtype=torch.float32, device=self.device) if std is not None else None
 
         self.to_tensor = transforms.ToTensor()
 
@@ -55,19 +54,15 @@ class PCAAugmentor:
         total_variance = eigenvalues.sum()
         double_shuffle = self.double
 
+        # Generate the views based on the augmentation configuration
         def sample_view_mask(strategy, drop_ratio, retain_ratio):
             sorted_indices = torch.argsort(eigenvalues, descending=True)
             sorted_eigvals = eigenvalues[sorted_indices]
             cumsum = torch.cumsum(sorted_eigvals, dim=0)
 
-            rel_cumsum = cumsum / total_variance
-
             if strategy == "low":
                 threshold_mask = cumsum < (1 - drop_ratio) * total_variance
-
                 selected = sorted_indices[: torch.nonzero(threshold_mask, as_tuple=False)[-1].item() + 1] if torch.any(threshold_mask) else sorted_indices
-
-                
 
             elif strategy == "middle":
                 drop_lower = (0.5 - drop_ratio / 2) * total_variance
@@ -78,7 +73,7 @@ class PCAAugmentor:
                 
                 selected = torch.cat([sorted_indices[:start_idx], sorted_indices[end_idx:]]) if end_idx > start_idx else sorted_indices
 
-            else:  # "random"
+            else:
                 if self.shuffle:
                     index = torch.randperm(len(eigenvalues), device=self.device)
                     eigvals_shuffled = eigenvalues[index]
@@ -98,8 +93,8 @@ class PCAAugmentor:
 
 
         # Apply slight randomization to drop and retain ratios for both input and target
-        drop_randomize = 0 if d > 0 else 0
-        mask_randomize = 0
+        drop_randomize = 0.1 if d > 0 else 0
+        mask_randomize = 0.1
 
         def randomized(r, eps):
             return r + (torch.rand(1, device=self.device).item() * 2 * eps - eps)
@@ -137,24 +132,21 @@ class PCAAugmentor:
             cumsum = torch.cumsum(eigs_shuffled, dim=0)
             total = cumsum[-1]
 
-            
             d_clamped = float(np.clip(d, 0.0, 0.5))
             m_clamped = float(np.clip(m, 0.0, 1.0))
             drop_mass = torch.as_tensor(d_clamped, device=self.device) * total
             retain_mass = torch.as_tensor(m_clamped, device=self.device) * (total - drop_mass)
 
-            # Find the smallest contiguous block [start:end) in the shuffled order that hits the variance target
+            # Find the smallest index where variance threshold is exceeded
             start_idx = torch.searchsorted(cumsum, drop_mass)
             target_mass = drop_mass + retain_mass
             end_idx = torch.searchsorted(cumsum, target_mass)
 
-            # Guard rails
             start_idx = torch.clamp(start_idx, 0, n)
             end_idx = torch.clamp(end_idx, start_idx, n)
 
             pc_mask_input = order[start_idx:end_idx].long()
 
-            # Complement goes to target
             if start_idx == 0:
                 pc_mask_target = order[end_idx:].long()
             elif end_idx == n:
@@ -169,9 +161,7 @@ class PCAAugmentor:
                 split_idx = int(m * base_mask.shape[0])
                 
                 pc_mask_input, pc_mask_target = base_mask[:split_idx], base_mask[split_idx:]
-            
-
-        
+              
         return pc_mask_input, pc_mask_target
 
     def extract_views(self, img, eigenvalues, index = None):
@@ -179,6 +169,7 @@ class PCAAugmentor:
             x = x - x.min()
             return x / (x.max() - x.min() + 1e-6)
         
+        # Apply interpolation
         def pad_matrix(P_full, keep_indices, strategy="pad", target_dim=None, std=0.01):
             device = P_full.device
             target_dim = target_dim or P_full.shape[1]
@@ -215,6 +206,7 @@ class PCAAugmentor:
             img = self.to_tensor(img)
         img = img.to(self.device)
 
+        # Position-specific patch PCA
         if self.patch_specific:
             C, H, W = img.shape
             H_p = W_p = H // self.patch_size
@@ -226,16 +218,13 @@ class PCAAugmentor:
             
             P = patches.squeeze(0).transpose(0,1)
             
-
             recon_in, recon_tg = [], []
             for idx in range(H_p * W_p):
                 i, j = divmod(idx, W_p)
-                Pmat = self.pca_matrix_grid[i][j].T.to(P.dtype)
-                
-                eigs = eigenvalues[i][j].to(P.dtype)
-                
-                mean_v = self.mean_grid[i][j].unsqueeze(0).to(P.dtype)
-                std_v = self.std_grid[i][j].unsqueeze(0).to(P.dtype)
+                Pmat = self.pca_matrix_grid[i][j].T.to(dtype=P.dtype, device=P.device)
+                eigs = eigenvalues[i][j].to(dtype=P.dtype, device=P.device)
+                mean_v = self.mean_grid[i][j].unsqueeze(0).to(dtype=P.dtype, device=P.device)
+                std_v = self.std_grid[i][j].unsqueeze(0).to(dtype=P.dtype, device=P.device)
                 pv = (P[idx:idx + 1] - mean_v) / std_v        
 
                 pc_in, pc_tg = self.compute_pc_mask(eigs)
@@ -254,63 +243,36 @@ class PCAAugmentor:
             stack_in = torch.cat(recon_in, dim=0).transpose(0,1).unsqueeze(0)
             stack_tg = torch.cat(recon_tg, dim=0).transpose(0,1).unsqueeze(0)
 
-                        
-            """sum_patches = []
-            for idx in range(H_p * W_p):
-                i, j = divmod(idx, W_p)
-                mean_v = self.mean_grid[i][j].unsqueeze(0).to(P.dtype)
-                std_v  = self.std_grid[i][j].unsqueeze(0).to(P.dtype)
-                sum_patch = (recon_in[idx] + recon_tg[idx]) * std_v + mean_v  # back to pixel space
-                sum_patches.append(sum_patch)
-
-                        
-            stack_sum = torch.cat(sum_patches, dim=0).transpose(0,1).unsqueeze(0)
-            
-                
-            img_sum = F.fold(
-                stack_sum, output_size=(H, W),
-                kernel_size=self.patch_size, stride=self.patch_size).squeeze(0)"""
-
-            img1 = F.fold(# fold back into images (use the same sum image for both outputs)
+            img1 = F.fold(
                 stack_in, output_size=(H,W),
                 kernel_size=self.patch_size, stride=self.patch_size).squeeze(0)
             img2 = F.fold(
                 stack_tg, output_size=(H,W),
                 kernel_size=self.patch_size, stride=self.patch_size).squeeze(0)
 
+            return norm(img1), norm(img2)
 
-            #return norm(img1), norm(img2)
-            return img1, img2
-
+        # Global PCA
         if not self.use_patch:
-            # --- Global PCA path ---
             img_flat = img.view(1, -1)
             if self.mean is not None and self.std is not None:
                 img_flat = (img_flat - self.mean) / (self.std + 1e-6)
             if self.precomputed_masks is not None and index is not None:
                 pc_mask_input, pc_mask = self.precomputed_masks[index]
             else:
-                pc_mask, pc_mask_input = self.compute_pc_mask(eigenvalues)
+                pc_mask_input, pc_mask = self.compute_pc_mask(eigenvalues)
 
 
             if self.interpolate:
                 strategy_input = random.choice(["pad", "mean", "gaussian", "hybrid"]) if self.pad_strategy == "random" else self.pad_strategy
                 strategy_target = random.choice(["pad", "mean", "gaussian", "hybrid"]) if self.pad_strategy == "random" else self.pad_strategy
-                p_input_full = pad_matrix(self.masking_fn_, pc_mask, strategy_input)
-                p_target_full = pad_matrix(self.masking_fn_, pc_mask_input, strategy_target)
+                p_input_full = pad_matrix(self.masking_fn_, pc_mask_input, strategy_input)
+                p_target_full = pad_matrix(self.masking_fn_, pc_mask, strategy_target)
                 img_reconstructed = img_flat @ p_input_full @ p_input_full.T
                 target = img_flat @ p_target_full @ p_target_full.T
             else:
-                # Compute which PCA components to mask
                 p_input = self.masking_fn_[:, pc_mask_input]
                 p_target = self.masking_fn_[:, pc_mask]
-
-                """proj_sum = p_input @ p_input.T + p_target @ p_target.T
-                identity = torch.eye(proj_sum.shape[0], device=proj_sum.device)
-
-                # Check deviation from identity
-                print("Max abs diff from I:", torch.max(torch.abs(proj_sum - identity)).item())
-                print("Frobenius norm diff:", torch.norm(proj_sum - identity, p='fro').item())"""
                 
                 target = (img_flat @ p_target) @ p_target.T
                 img_reconstructed = (img_flat @ p_input) @ p_input.T
@@ -318,13 +280,10 @@ class PCAAugmentor:
             if self.normalize:
                 img_reconstructed = norm(img_reconstructed)
                 target = norm(target)
-
-            """img_reconstructed = (img_reconstructed + target) * self.std + self.mean
-            target = (img_reconstructed + target) * self.std + self.mean"""
                 
-            return img_reconstructed.view(img.shape), target.view(img.shape) # no switching to cpu
+            return img_reconstructed.view(img.shape), target.view(img.shape)
 
-        """Position-agnostic path"""
+        # Position-Agnostic Patch PCA
         C, H, W = img.shape
         
         patches = F.unfold(
@@ -429,8 +388,6 @@ class PCAAugmentor:
             if denom < 1e-4:
                 denom = 1e-4
             recon_img /= denom
-
-            #return recon_img.cpu()
             return recon_img
 
         view1 = apply_patchwise_masking()
@@ -480,9 +437,9 @@ class PCAAugmentor:
 
         def apply_patchwise_cyclic(base_fraction):
             patches = []
+            mask_randomize = 0.1
             for i in range(0, H, patch_size):
                 for j in range(0, W, patch_size):
-                    mask_randomize = 0.1
                     variance_ratio = self.pca_ratio + np.random.uniform(-mask_randomize, mask_randomize)
                     
                     

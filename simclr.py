@@ -88,98 +88,33 @@ class SimCLR(object):
 
         n_iter = 0
 
-        self.debug_timing = False
-        # --- Debug timing helpers ---
-        def _dbg(msg):
-            if self.debug_timing:
-                print(f"[DBG][epoch {epoch_counter}][iter {n_iter}] {msg}", flush=True)
-
-        # Running averages for timings (seconds)
-        load_times, cat_times, h2d_times = [], [], []
-        fwd_times, loss_times, bwd_times, opt_times = [], [], [], []
-
         logging.info(f"Start SimCLR training for {self.args.epochs} epochs.")
         logging.info(f"Training with gpu: {self.args.disable_cuda}.")
 
         
         for epoch_counter in range(self.args.epochs):
             self.model.train()
-            if self.debug_timing:
-                print(f"[DBG] starting epoch {epoch_counter} | dataset={self.args.dataset_name} | batches={len(train_loader)} | bs={self.args.batch_size} | workers={self.args.workers}", flush=True)
             
             total_loss = 0.0
             total_top1 = 0.0
             total_samples = 0
-            prev_iter_end = time.time()
+            
             for batch_idx, (images, _) in enumerate(tqdm(train_loader)):
-                t0 = time.time()
-                loader_wait = t0 - prev_iter_end
-                load_times.append(loader_wait)
-                if self.debug_timing:
-                    try:
-                        _shapes = [tuple(im.shape) for im in images]
-                    except Exception:
-                        _shapes = ["<unknown>"]
-                    _dbg(f"start batch | views={len(images)} shapes={_shapes}")
-                    _dbg(f"dataloader wait: {loader_wait:.4f}s")
-
-                
                 images = torch.cat(images, dim=0)
-
-
-                t_cat_end = time.time()
-                cat_times.append(t_cat_end - t0)
-                _dbg(f"concat views: {t_cat_end - t0:.4f}s -> batch={tuple(images.shape)}")
-
                 images = images.to(self.args.device, non_blocking = True)
-
-                torch.cuda.synchronize()
-
-                t_h2d_end = time.time()
-                h2d_times.append(t_h2d_end - t_cat_end)
-                _dbg(f"H2D transfer: {t_h2d_end - t_cat_end:.4f}s")
-
-                t_fwd_start = time.time()
                 
                 with autocast(enabled=self.args.fp16_precision):
-                    features = self.model(images) # forward pass through resnet
+                    features = self.model(images)
 
-                torch.cuda.synchronize()
-                t_fwd_end = time.time()
-                fwd_times.append(t_fwd_end - t_fwd_start)
-                _dbg(f"forward: {t_fwd_end - t_fwd_start:.4f}s")
-
-                t_loss_start = time.time()
                 with autocast(enabled=self.args.fp16_precision):
-                    logits, labels = self.info_nce_loss(features) # compute contrastive loss
+                    logits, labels = self.info_nce_loss(features)
                     loss = self.criterion(logits, labels)
-
-                torch.cuda.synchronize()
-                t_loss_end = time.time()
-                loss_times.append(t_loss_end - t_loss_start)
-                _dbg(f"loss+sim: {t_loss_end - t_loss_start:.4f}s")
-
-                t_bwd_start = time.time()
                 
                 self.optimizer.zero_grad()
                 scaler.scale(loss).backward()
 
-                torch.cuda.synchronize()
-                t_bwd_end = time.time()
-                bwd_times.append(t_bwd_end - t_bwd_start)
-                _dbg(f"backward (scaled): {t_bwd_end - t_bwd_start:.4f}s")
-
-                t_opt_start = time.time()
-
-
-
                 scaler.step(self.optimizer)
                 scaler.update()
-
-                torch.cuda.synchronize()
-                t_opt_end = time.time()
-                opt_times.append(t_opt_end - t_opt_start)
-                _dbg(f"optimizer step: {t_opt_end - t_opt_start:.4f}s")
 
                 batch_size = labels.size(0)
                 top1, top5 = accuracy(logits, labels, topk=(1, 5))
@@ -187,7 +122,6 @@ class SimCLR(object):
                 total_top1 += top1[0].item() * batch_size
                 total_samples += batch_size
 
-                # Dynamically adjust logging interval: start frequent, reduce over time
                 log_interval = max(10, self.args.log_every_n_steps * (1 + epoch_counter // 5))
                 if n_iter % log_interval == 0:
                     self.writer.add_scalar('loss', loss, global_step=n_iter)
@@ -195,14 +129,6 @@ class SimCLR(object):
                     self.writer.add_scalar('acc/top5', top5[0], global_step=n_iter)
                     
                 n_iter += 1
-
-                if self.debug_timing and (n_iter <= 5 or (n_iter % self.debug_every == 0)):
-                    import numpy as _np
-                    def _avg(x): 
-                        return float(_np.mean(x)) if x else 0.0
-                    _dbg(f"AVG so far | load={_avg(load_times):.4f}s cat={_avg(cat_times):.4f}s h2d={_avg(h2d_times):.4f}s "
-                         f"fwd={_avg(fwd_times):.4f}s loss={_avg(loss_times):.4f}s bwd={_avg(bwd_times):.4f}s opt={_avg(opt_times):.4f}s")
-                prev_iter_end = time.time()
 
 
             self.scheduler.step(epoch_counter)
@@ -213,13 +139,6 @@ class SimCLR(object):
             logging.debug(f"Epoch: {epoch_counter}\tLoss: {avg_loss:.4f}\tTop1 accuracy: {avg_top1:.2f}")
             self.writer.add_scalar('train/epoch_loss', avg_loss, epoch_counter)
             self.writer.add_scalar('train/epoch_top1', avg_top1, epoch_counter)
-
-            if self.debug_timing:
-                print(f"[DBG][epoch {epoch_counter}] epoch done | avg_loss={avg_loss:.4f} avg_top1={avg_top1:.4f} "
-                      f"| load={sum(load_times):.2f}s fwd={sum(fwd_times):.2f}s bwd={sum(bwd_times):.2f}s opt={sum(opt_times):.2f}s", flush=True)
-                load_times.clear(); cat_times.clear(); h2d_times.clear()
-                fwd_times.clear(); loss_times.clear(); bwd_times.clear(); opt_times.clear()
-
 
             if val_loader is not None:
                 val_contrastive_loss, val_cls_acc, val_top1_acc = self.validate(val_loader)
@@ -232,12 +151,12 @@ class SimCLR(object):
 
         # save model checkpoints
         checkpoint_name = 'checkpoint_{:04d}.pth.tar'.format(self.args.epochs)
-        """save_checkpoint({
+        save_checkpoint({
             'epoch': self.args.epochs,
             'arch': self.args.arch,
             'state_dict': self.model.state_dict(),
             'optimizer': self.optimizer.state_dict(),
-        }, is_best=False, filename=os.path.join(self.writer.log_dir, checkpoint_name))"""
+        }, is_best=False, filename=os.path.join(self.writer.log_dir, checkpoint_name))
         logging.info(f"Model checkpoint and metadata has been saved at {self.writer.log_dir}.")
 
         
@@ -371,12 +290,13 @@ class SimCLR(object):
             top1_test /= (counter + 1)
             top5_test /= (counter + 1)
 
-            log_msg = f"LINEAR PROBE FULL — Epoch {ep}\tTop1 Train accuracy: {top1_train_acc.item():.2f}\tTop1 Test accuracy: {top1_test.item():.2f}\tTop5 Test Accuracy: {top5_test.item():.2f}"
-
             # Log final values
             if self.writer is not None:
                 log_path = os.path.join(self.writer.log_dir, 'training.log')
                 with open(log_path, "a") as f:
-                    f.write(log_msg + "\n")
+                    f.write(f"LINEAR PROBE FULL — Epoch {ep}\t"
+                    f"Top1 Train: {top1_train_acc.item():.2f}\t"
+                    f"Top1 Test: {top1_test.item():.2f}\t"
+                    f"Top5 Test: {top5_test.item():.2f}\n")
 
         return top1_test.item(), top5_test.item()

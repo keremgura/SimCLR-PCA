@@ -1,5 +1,3 @@
-from torchvision.transforms import transforms
-import torch
 import os
 import glob
 from data_aug.gaussian_blur import GaussianBlur
@@ -51,17 +49,18 @@ class ContrastiveLearningDataset:
             dataset_kwargs = {'split': split}
             img_size = 96
         elif name == 'tiny_imagenet':
-            dataset_class = None  # handled below with ImageFolder / TinyImageNetValDataset
+            dataset_class = None
             dataset_kwargs = {}
             img_size = 32
         else:
             raise ValueError(f"Dataset {name} is not supported!")
 
 
-        resize_transform = transforms.Resize((self.args.stl_resize, self.args.stl_resize)) if name != 'cifar10' else IdentityTransform()
+        resize_transform = transforms.Resize((self.args.resize, self.args.resize)) if name != 'cifar10' else IdentityTransform()
 
-        ### 🧩 CASE 1: PCA augmentor
+        # pca augmentations
         if pca_augmentor is not None and eigenvalues is not None:
+            # extra cropping
             if extra_augmentations:
                 transform = transforms.Compose([
                     resize_transform,
@@ -71,28 +70,28 @@ class ContrastiveLearningDataset:
                     resize_transform,
                     PCAAugmentorWrapper(pca_augmentor, eigenvalues, self.args.masking_method, self.args.patch_size)])
         
-        ### 🧩 CASE 2: SimCLR augmentations
+        # spatial SimCLR augmentations
         elif augmentations:
             transform = transforms.Compose([
                 resize_transform,
                 ContrastiveLearningViewGenerator(
                     self.get_simclr_pipeline_transform(
-                        size=self.args.stl_resize if img_size != 32 else 32,
+                        size=self.args.resize if img_size != 32 else 32,
                         min_crop_scale=self.args.min_crop_scale_spatial,
                         color_jitter_prob=self.args.color_jitter_prob,
                         gray_scale_prob=self.args.gray_scale_prob), n_views)])
-        ### 🧩 CASE 3: No augmentations
+        # No augmentations
         else:
             transform = resize_transform
 
-        # --- Instantiate dataset ---
+        # instantiate dataset
         if name in ('cifar10', 'stl10'):
             return dataset_class(dataset_root, transform=transform, download=False, **dataset_kwargs)
         elif name == 'tiny_imagenet':
             if split in ('train', 'unlabeled') or train:
-                # Use the entire train folder as unlabeled SSL pool
                 return datasets.ImageFolder(root=os.path.join(dataset_root, 'train'), transform=transform)
             else:
+                # use validation as test dataset
                 return datasets.ImageFolder(root=os.path.join(dataset_root, 'val_split'), transform=transform)
             
             

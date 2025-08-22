@@ -15,3 +15,9 @@ run: main function
 utils: helper functions
 ```
 
+## Running the model
+
+```
+In order to reproduce the results for SimCLR-PCA, you must first download the dataset you would like to work with into a folder named data.
+The second step is to create a relevant PCA basis for the dataset.
+```

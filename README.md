@@ -17,11 +17,12 @@ utils: helper functions
 
 ## Running the model
 
-```
+
 In order to reproduce the results for SimCLR-PCA, you must first download the dataset you would like to work with into a folder named data.
 The second step is to create a relevant PCA basis for the dataset. In **pca.py**, all bases can be computed in one run; however, you can comment out the unwanted datasets to save time.
 Additionally, 32*32 bases for Tiny ImageNet are already computed under the outputs folder.
 After the PCA basis is computed and saved, simply use **python run.py** with the desired configurations.
 
 For patch PCA (position-specific and position-agnostic), firstly run **patch_pca_position_specific.py** and **patch_pca.py** respectively.
-```
+
+

@@ -20,7 +20,7 @@ class ResNetSimCLR(nn.Module):
         dim_mlp = self.backbone.fc.in_features
 
         # Save original fully connected layer for feature extraction
-        self.backbone.fc = nn.Identity()  # Strip FC for raw features
+        self.backbone.fc = nn.Identity()
         self.projector = nn.Sequential(
             nn.Linear(dim_mlp, dim_mlp),
             nn.ReLU(),
